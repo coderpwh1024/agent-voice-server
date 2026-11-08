@@ -29,6 +29,7 @@ from app.schemas.voice import (
     CloseSession,
     CommitInput,
     Configure,
+    MemoryConfirmationInput,
     Ping,
     PlaybackFinished,
     PlaybackProgress,
@@ -238,6 +239,7 @@ class VoiceConnection:
         input_id: str,
         resume: dict | None = None,
         *,
+        confirmation: dict | None = None,
         wake_greeting: bool = False,
     ) -> None:
         if self.pending and resume is None:
@@ -266,7 +268,9 @@ class VoiceConnection:
         self.turns[turn.response_id] = turn
         if wake_greeting:
             self.wake_greeting_response_id = turn.response_id
-        self.inputs.put_nowait((turn, resume))
+        self.inputs.put_nowait(
+            (turn, {"memory_confirmation": confirmation} if confirmation else resume)
+        )
         self.activity = time.monotonic()
         await self.emit(
             "input.accepted",
@@ -376,6 +380,15 @@ class VoiceConnection:
                             "[用户提交业务确认]", event.event_id, {event.interrupt_id: event.value}
                         )
                         self.pending.pop(event.interrupt_id, None)
+                case MemoryConfirmationInput():
+                    await self.submit(
+                        "确认记忆操作" if event.approved else "取消记忆操作",
+                        event.event_id,
+                        confirmation={
+                            "confirmation_id": event.confirmation_id,
+                            "approved": event.approved,
+                        },
+                    )
                 case Ping():
                     await self.emit("pong", client_event_id=event.event_id)
                 case CloseSession():
@@ -622,6 +635,14 @@ class VoiceConnection:
                         self.settings.VOICE_LLM_ENABLE_THINKING
                     )
                 turn.run_id = str(run_id)
+                kwargs["config"].setdefault("metadata", {})["execution_response_id"] = (
+                    turn.response_id
+                )
+                if resume is not None and "memory_confirmation" in resume:
+                    kwargs["config"]["configurable"]["memory_confirmation"] = resume[
+                        "memory_confirmation"
+                    ]
+                    resume = None
                 if resume is not None:
                     state = await self.agent.aget_state(kwargs["config"])
                     pending_ids = {

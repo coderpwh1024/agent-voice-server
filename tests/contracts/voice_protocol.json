@@ -354,6 +354,41 @@
       ],
       "title": "TextInput",
       "type": "object"
+    },
+    "MemoryConfirmationInput": {
+      "additionalProperties": false,
+      "properties": {
+        "event_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Event Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "memory.confirm",
+          "title": "Type",
+          "type": "string"
+        },
+        "confirmation_id": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[a-f0-9]+$",
+          "title": "Confirmation Id",
+          "type": "string"
+        },
+        "approved": {
+          "title": "Approved",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "event_id",
+        "type",
+        "confirmation_id",
+        "approved"
+      ],
+      "title": "MemoryConfirmationInput",
+      "type": "object"
     }
   },
   "discriminator": {
@@ -368,7 +403,8 @@
       "playback.progress": "#/$defs/PlaybackProgress",
       "response.cancel": "#/$defs/CancelResponse",
       "session.close": "#/$defs/CloseSession",
-      "session.configure": "#/$defs/Configure"
+      "session.configure": "#/$defs/Configure",
+      "memory.confirm": "#/$defs/MemoryConfirmationInput"
     },
     "propertyName": "type"
   },
@@ -399,6 +435,9 @@
     },
     {
       "$ref": "#/$defs/ApprovalInput"
+    },
+    {
+      "$ref": "#/$defs/MemoryConfirmationInput"
     },
     {
       "$ref": "#/$defs/Ping"

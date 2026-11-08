@@ -7,12 +7,14 @@ from langchain_core.runnables import RunnableConfig
 from langfuse.langchain import CallbackHandler
 from langgraph.types import Command
 from langsmith import uuid7
+from pydantic import ValidationError
 
 from app.agents import AgentGraph
 from app.core import settings
 from app.core.exceptions import ServiceError
 from app.repositories.voice import VoiceRepository
 from app.schemas import ChatMessage, UserInput
+from app.schemas.execution import MemoryConfirmation
 from app.services.agent_runner import delivery_context
 from app.services.messages import ensure_model_available, langchain_to_chat_message
 
@@ -57,19 +59,26 @@ async def build_run_input(
             "checkpoint_id",
             "checkpoint_ns",
             "authenticated_user_id",
+            "execution_run_id",
+            "execution_response_id",
         }
         if overlap := reserved_keys & user_input.agent_config.keys():
             raise ServiceError(
                 status_code=422,
                 detail=f"agent_config contains reserved keys: {overlap}",
             )
+        if "memory_confirmation" in user_input.agent_config:
+            try:
+                MemoryConfirmation.model_validate(user_input.agent_config["memory_confirmation"])
+            except ValidationError:
+                raise ServiceError(422, "Invalid memory confirmation") from None
         configurable.update(user_input.agent_config)
 
     configurable["authenticated_user_id"] = authenticated_user_id
 
     config = RunnableConfig(
         configurable=configurable,
-        metadata={"user_id": user_id, "agent_id": agent_id},
+        metadata={"user_id": user_id, "agent_id": agent_id, "execution_run_id": str(run_id)},
         run_id=run_id,
         callbacks=callbacks,
     )

@@ -112,6 +112,37 @@ streamlit_app.py         开发聊天界面
 
 其他 Agent 标识返回 404。旧数据库、历史记录与记忆不在本次收敛中删除或迁移。旧 Nacos 的研究、RAG、MCP 配置字段仍接受加载，但不能恢复已移除的能力；主 Agent 不再提供联网检索。Streamlit 和事件层保留旧历史消息的兼容展示与协议解析。
 
+## 执行过程与恢复
+
+主 Agent 按真实业务边界发布 `execution.progress`，覆盖记忆检索与整理、回复生成、
+邮件请求与提交、视频 Skill 加载、参数检查和操作。步骤包含运行 ID、步骤 ID、单调递增的
+序号、状态和实际耗时；不输出模型内部推理、提示词、供应商原始载荷或虚构进度百分比。
+
+- SSE：现有 `message` 事件中的 `ChatMessage(type="custom").custom_data`。
+- 实时语音：现有 `agent.custom.data`；外层 `response_id` 关联助手消息。
+- AG-UI：`CUSTOM` 事件，名称为 `execution.progress`。
+- 最终摘要：`ChatMessage.response_metadata.execution`，随原有检查点保存，兼容旧消息。
+- 恢复查询：`GET /executions?thread_id=...` 或 `GET /{agent_id}/executions?thread_id=...`，
+  返回本线程最近 100 个执行快照，经过 bearer 认证和原有线程归属检查。
+
+快照使用既有 PostgreSQL LangGraph Store，按用户和线程隔离；没有新增第一方业务表或
+改变既有表结构。执行展示状态独立于模型上下文、音频播放以及视频生成状态。
+恢复查询不重放音频、不重新发送邮件、不重新生成视频，也不会自动续跑中断的模型请求。
+超过五分钟未更新的运行快照显示“结果待核实”，不能据此推断外部操作失败。
+
+记忆修改和删除的确认提供有期限的 `confirmation_id`，绑定当前操作、候选目标和内容。
+App 使用新增的 `memory.confirm` 控制事件，传入 `confirmation_id` 和布尔值 `approved`；
+HTTP/SSE 客户端可通过 `agent_config.memory_confirmation` 提交同一结构。
+后端在原有线程锁内恢复检查点，再校验当前操作、有效期和用户绑定；旧按钮、重复确认或
+操作变化不会触发另一个修改。原来的文字确认和 LangGraph `approval.submit` 继续支持，
+两种确认机制保持独立。
+
+Flutter 客户端在助手消息中展示可折叠步骤，历史详情复用同一组件。重新连接或打开历史时
+合并持久快照，按运行 ID 和序号去重；实时文字仍由文字流更新，恢复数据不插入正在输出的
+文字流。前台按需刷新执行状态，并按视频记录 ID 去重刷新聊天中的视频；进入后台、账号/
+服务地址变化或销毁控制器后停止刷新。视频每 10 秒查询，单个任务最多自动查询 120 次，
+用户仍可进入详情刷新。停止回答不撤回已提交的邮件或视频任务。
+
 ## 配置与运行
 
 项目支持 Python 3.12–3.14，固定 uv 版本见 `deploy/uv-version`。参考 `.env.example` 和 `config/environments/` 准备 Nacos、PostgreSQL 和对应模型配置后运行：

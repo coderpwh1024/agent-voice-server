@@ -39,6 +39,8 @@ RESERVED_CONFIGURABLE_KEYS = {
     "checkpoint_id",
     "checkpoint_ns",
     "authenticated_user_id",
+    "execution_run_id",
+    "execution_response_id",
 }
 
 
@@ -73,7 +75,7 @@ def _base_config(input_data: RunAgentInput, agent_id: str) -> RunnableConfig:
     return RunnableConfig(
         configurable=configurable,
         # Recorded in checkpoint metadata so AG-UI threads show up in /threads too.
-        metadata={"user_id": user_id, "agent_id": agent_id},
+        metadata={"user_id": user_id, "agent_id": agent_id, "execution_run_id": input_data.run_id},
         callbacks=callbacks,
     )
 

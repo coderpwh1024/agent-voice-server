@@ -7,7 +7,7 @@ from typing import Any, NotRequired, TypedDict
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
-from langgraph.config import get_stream_writer
+from langgraph.config import get_store, get_stream_writer
 from langgraph.func import entrypoint
 from pydantic import ValidationError
 
@@ -15,7 +15,9 @@ from app.agents.chat import answer_chat
 from app.agents.email_commands import handle_email_command
 from app.agents.memory_commands import handle_memory_command
 from app.core import get_model, settings
+from app.schemas.execution import ExecutionConfirmation
 from app.schemas.memory_commands import MemoryDialogue
+from app.services.execution import ExecutionTrace, confirmation_id, progress
 from app.services.memory.mem0_service import Mem0Service, get_mem0_service
 from app.services.skills.video_chat import VideoSkillSession
 
@@ -101,8 +103,7 @@ async def _retrieve_facts(
         return [], "search_failed"
 
 
-@entrypoint()
-async def mem0_chat(
+async def _mem0_chat(
     inputs: dict[str, list[BaseMessage]],
     *,
     previous: Mem0ChatState | None,
@@ -184,7 +185,20 @@ async def mem0_chat(
                 },
             )
     logger.info("Mem0 chatbot started memory_enabled=%s", memory is not None)
+    await progress("memory.search", "检索相关记忆")
     facts, status = await _retrieve_facts(memory, user_messages, user_id)
+    await progress(
+        "memory.search",
+        "检索相关记忆",
+        "warning" if status == "search_failed" else "succeeded",
+        "记忆检索暂不可用，继续回答"
+        if status == "search_failed"
+        else (
+            "记忆服务未启用"
+            if status == "disabled"
+            else ("已找到相关记忆" if facts else "未找到相关记忆")
+        ),
+    )
     prompt = _chat_prompt(messages, facts, status)
     logger.info("Mem0 answer started preparation_ms=%d", int((monotonic() - started) * 1000))
     human = next(
@@ -196,7 +210,9 @@ async def mem0_chat(
         if human is not None
         else None
     )
+    await progress("chat.answer", "生成回复")
     response = await answer_chat(model, prompt, config, video=video)
+    await progress("chat.answer", "生成回复", "succeeded")
     if video is not None:
         video_dialogue = video.saved
     if response.response_metadata.get("video_status"):
@@ -209,6 +225,7 @@ async def mem0_chat(
             },
         )
     if memory and user_messages:
+        await progress("memory.write", "整理本轮记忆")
         try:
             await memory.remember(
                 [user_messages[-1]], user_id, thread_id, context=_extraction_context(messages[:-1])
@@ -217,6 +234,13 @@ async def mem0_chat(
         except Exception as exc:
             status = "write_failed"
             logger.warning("Mem0 write failed error_type=%s", type(exc).__name__)
+    if memory and user_messages:
+        await progress(
+            "memory.write",
+            "整理本轮记忆",
+            "warning" if status == "write_failed" else "succeeded",
+            "记忆写入未确认，请稍后查询" if status == "write_failed" else "记忆处理完成",
+        )
     response.response_metadata["memory_status"] = status
     logger.info(
         "Mem0 chatbot completed memory_status=%s duration_ms=%d",
@@ -231,3 +255,36 @@ async def mem0_chat(
             "video_dialogue": video_dialogue,
         },
     )
+
+
+@entrypoint()
+async def mem0_chat(
+    inputs: dict[str, list[BaseMessage]],
+    *,
+    previous: Mem0ChatState | None,
+    config: RunnableConfig,
+) -> entrypoint.final:
+    values = config.get("configurable", {})
+    for name in ("user_id", "thread_id"):
+        if not isinstance(values.get(name), str) or not values[name].strip():
+            raise ValueError(f"A bound {name} is required for mem0-chatbot")
+    latest = inputs["messages"][-1] if inputs["messages"] else None
+    trace = ExecutionTrace(config, get_store(), get_stream_writer(), latest.id if latest else None)
+    async with trace.bind():
+        result = await _mem0_chat(inputs, previous=previous, config=config)
+        response = result.value["messages"][-1]
+        saved = result.save.get("memory_dialogue")
+        dialogue = MemoryDialogue.model_validate(saved) if saved else None
+        if (
+            dialogue
+            and dialogue.pending
+            and dialogue.pending.stage == "confirm"
+            and response.response_metadata.get("memory_status") == "confirmation_required"
+        ):
+            trace.snapshot.confirmation = ExecutionConfirmation(
+                confirmation_id=confirmation_id(dialogue.pending),
+                label=str(response.content),
+                expires_at=dialogue.pending.expires_at,
+            )
+        await trace.finish(response)
+        return result

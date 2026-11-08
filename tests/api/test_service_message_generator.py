@@ -34,7 +34,18 @@ async def test_main_agent_stream_keeps_tokens_messages_and_done(
     assert chunks[-1] == "data: [DONE]\n\n"
     events = [json.loads(chunk.removeprefix("data: ")) for chunk in chunks[:-1]]
     assert not any(event["type"] == "error" for event in events)
-    messages = [event["content"] for event in events if event["type"] == "message"]
+    messages = [
+        event["content"]
+        for event in events
+        if event["type"] == "message" and event["content"]["type"] == "ai"
+    ]
+    progress = [
+        event["content"]["custom_data"]
+        for event in events
+        if event["type"] == "message" and event["content"]["type"] == "custom"
+    ]
+    assert progress[-1]["status"] == "succeeded"
+    assert progress[-1]["run_id"] == messages[0]["run_id"]
     assert len(messages) == 1
     assert messages[0]["type"] == "ai"
     assert messages[0]["content"] == "你好。"

@@ -325,7 +325,9 @@ async def test_structured_outputs_are_hidden_and_checkpoint_restores_confirmatio
         )
     ]
     assert not [event for event in events if event.type == "token"]
-    final = next(event.content for event in events if event.type == "message")
+    final = next(
+        event.content for event in events if event.type == "message" and event.content.type == "ai"
+    )
     assert final.response_metadata["memory_status"] == "confirmation_required"
     assert "matching_indices" not in final.content
     resumed = module.mem0_chat.copy()

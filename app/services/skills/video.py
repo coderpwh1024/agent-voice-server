@@ -22,6 +22,7 @@ from app.schemas.video import (
     VideoTask,
 )
 from app.schemas.video_skill import VideoSkillDialogue, VideoSkillIntent
+from app.services.execution import record_video_result
 from app.services.video.runtime import get_video_service
 from app.services.video.service import (
     VideoBusyError,
@@ -134,6 +135,7 @@ def _publish(
     response: AIMessage, kind: str, payload: dict[str, Any], writer: StreamWriter | None
 ) -> AIMessage:
     response.response_metadata["video"] = payload["video"] if kind == "video.task" else payload
+    record_video_result(response.response_metadata["video"])
     if writer is not None:
         CustomData(data={"type": kind, **payload}).dispatch(writer)
     return response

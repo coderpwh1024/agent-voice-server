@@ -17,6 +17,7 @@ from pydantic import ValidationError
 from app.core import settings
 from app.core.model_metrics import invoke_chat_model
 from app.schemas.video_skill import VideoSkillIntent
+from app.services.execution import progress
 from app.services.skills.video import (
     _reply,
     _validation_message,
@@ -84,6 +85,7 @@ class VideoSkillSession:
             return _reply("视频技能加载参数无效，本次没有执行视频操作。", "invalid")
         if settings.video_skill is None:
             return _reply("视频技能尚未从管理中心加载，请稍后再试。", "unavailable")
+        await progress("video.skill", "加载视频技能")
         reference = video_skill_reference(self.saved, config, self.history)
         tool = convert_to_openai_tool(VideoSkillIntent)
         tool["function"]["name"] = "video_operation"
@@ -95,6 +97,8 @@ class VideoSkillSession:
             selection,
             ToolMessage(content=reference, tool_call_id=call["id"]),
         ]
+        await progress("video.skill", "加载视频技能", "succeeded")
+        await progress("video.parameters", "检查视频参数")
         started = monotonic()
         logger.info("视频技能已按需加载 技能摘要=%s", settings.video_skill.digest[:12])
         try:
@@ -120,6 +124,17 @@ class VideoSkillSession:
             operation = VideoSkillIntent.model_validate(calls[0]["args"])
         except ValidationError as exc:
             return _reply(_validation_message(exc), "invalid")
+        await progress("video.parameters", "检查视频参数", "succeeded")
+        label = {
+            "create": "提交视频生成任务",
+            "edit": "提交视频编辑任务",
+            "detail": "查询视频状态",
+            "list": "查询视频列表",
+            "count": "统计视频任务",
+            "draft": "保存视频草稿",
+            "cancel": "取消视频草稿",
+        }.get(operation.action, "检查视频请求")
+        await progress("video.submit", label)
         response, self.saved = await execute_video_skill(
             self.message, self.saved, operation, config, writer=self.writer
         )

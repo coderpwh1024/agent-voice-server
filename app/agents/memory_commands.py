@@ -13,6 +13,7 @@ from langchain_openai.chat_models.base import BaseChatOpenAI
 from pydantic import BaseModel
 
 from app.core import settings
+from app.schemas.execution import MemoryConfirmation
 from app.schemas.memory import MemoryRecord
 from app.schemas.memory_commands import (
     MemoryDialogue,
@@ -22,6 +23,7 @@ from app.schemas.memory_commands import (
     MemoryTarget,
     PendingMemoryCommand,
 )
+from app.services.execution import confirmation_id, progress
 from app.services.memory.mem0_service import Mem0Service, MemoryConflictError, MemoryNotFoundError
 
 logger = logging.getLogger(__name__)
@@ -444,6 +446,18 @@ async def handle_memory_command(
     model: BaseChatModel,
     config: RunnableConfig,
 ) -> AIMessage | None:
+    submitted = config.get("configurable", {}).get("memory_confirmation")
+    if submitted is not None:
+        confirmation = MemoryConfirmation.model_validate(submitted)
+        pending = dialogue.pending
+        if (
+            pending is None
+            or pending.stage != "confirm"
+            or pending.expires_at <= datetime.now(UTC)
+            or confirmation.confirmation_id != confirmation_id(pending)
+        ):
+            return _reply("该确认已失效或操作已改变，请重新查询并确认。", "conflict")
+        text = "确认" if confirmation.approved else "取消"
     explicit_confirmation = _normalized(text) in {
         "确认",
         "确定",
@@ -457,6 +471,7 @@ async def handle_memory_command(
     }
     if not dialogue.pending and not COMMAND_HINT.search(text) and not explicit_confirmation:
         return None
+    await progress("memory.command", "处理记忆操作")
     try:
         if memory is None:
             dialogue.pending = None

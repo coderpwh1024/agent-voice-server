@@ -1861,7 +1861,10 @@ def test_audio_video_requests_remain_ordinary_chat(voice_env, monkeypatch, agent
             assert spoken == expected
             assert any(item["type"] == "audio" for item in seen)
             assert sum(item["type"] == "transcript.final" for item in seen) == 1
-            assert not any(item["type"] == "agent.custom" for item in seen)
+            assert not any(
+                item["type"] == "agent.custom" and item["data"]["type"].startswith("video.")
+                for item in seen
+            )
             event(ws, "playback.finished", response_id=seen[-1]["response_id"])
         event(ws, "session.close")
         read_until(ws, "session.closed")
@@ -1986,7 +1989,11 @@ def test_audio_triggers_managed_video_skill_for_create_list_detail_and_edit(
             assert any(item["type"] == "audio" for item in seen)
             spoken = "".join(item["text"] for item in seen if item["type"] == "text.delta")
             assert '"action"' not in spoken and "https://" not in spoken
-            data = next(item["data"] for item in seen if item["type"] == "agent.custom")
+            data = next(
+                item["data"]
+                for item in seen
+                if item["type"] == "agent.custom" and item["data"]["type"].startswith("video.")
+            )
             assert data["type"] == ("video.list" if sequence == 1 else "video.task")
             if sequence == 1:
                 assert data["total"] == 2 and "2 个" in spoken
@@ -2008,3 +2015,107 @@ def test_audio_triggers_managed_video_skill_for_create_list_detail_and_edit(
     service.edit.assert_awaited_once()
     assert service.edit.await_args.args[2] == 123
     assert len(repo.records) == 4
+
+
+def test_execution_snapshots_recover_with_thread_authorization(voice_env, monkeypatch):
+    import importlib
+
+    from langgraph.store.memory import InMemoryStore
+
+    module = importlib.import_module("app.agents.mem0_chat")
+    client, _, agents, headers = voice_env
+    monkeypatch.setattr(
+        module, "get_model", lambda *args, **kwargs: FakeListChatModel(responses=["你好。"])
+    )
+    monkeypatch.setattr(module, "get_mem0_service", lambda: None)
+    graph = module.mem0_chat.copy()
+    graph.checkpointer = MemorySaver()
+    graph.store = InMemoryStore()
+    agents["chatbot"] = graph
+    agents["mem0-chatbot"] = graph
+    auth = headers("7")
+    session = create(client, auth)
+    with connect(client, session, auth) as ws:
+        configure(ws)
+        event(ws, "input.text", text="你好")
+        seen = read_until(ws, "response.done")
+        progress_events = [item["data"] for item in seen if item["type"] == "agent.custom"]
+        assert progress_events[-1]["status"] == "succeeded"
+        assert [item["sequence"] for item in progress_events] == sorted(
+            {item["sequence"] for item in progress_events}
+        )
+        event(ws, "session.close")
+        read_until(ws, "session.closed")
+    query = {"thread_id": session["thread_id"]}
+    recovered = client.get("/chatbot/executions", headers=auth, params=query)
+    assert recovered.status_code == 200
+    snapshots = recovered.json()["data"]["executions"]
+    assert snapshots[-1]["text"] == "你好。"
+    assert snapshots[-1]["response_id"] == progress_events[-1]["response_id"]
+    assert client.get("/chatbot/executions", headers=headers("8"), params=query).status_code == 403
+    assert client.get("/mem0-chatbot/executions", headers=auth, params=query).status_code == 403
+    assert client.get("/chatbot/executions", params=query).status_code == 401
+    history = client.post("/chatbot/history", headers=auth, json=query).json()["data"]["messages"]
+    assert history[-1]["response_metadata"]["execution"]["run_id"] == snapshots[-1]["run_id"]
+
+
+def test_memory_confirmation_buttons_are_bound_to_current_operation(voice_env, monkeypatch):
+    import importlib
+
+    from langgraph.store.memory import InMemoryStore
+
+    from app.agents import memory_commands
+    from app.schemas.memory import MemoryList, MemoryRecord
+    from app.schemas.memory_commands import MemoryIntent, MemoryMutationResult
+
+    module = importlib.import_module("app.agents.mem0_chat")
+    client, _, agents, headers = voice_env
+    record = MemoryRecord(id=uuid4(), memory="喜欢茶", user_id="7", agent_id="mem0-chatbot")
+    memory = AsyncMock()
+    memory.search_memory_records.return_value = MemoryList(memories=[record])
+    memory.apply_memory_mutation.return_value = MemoryMutationResult(
+        status="deleted", deleted_count=1
+    )
+    monkeypatch.setattr(
+        memory_commands,
+        "parse_memory_intent",
+        AsyncMock(return_value=MemoryIntent(action="delete", query="茶")),
+    )
+    monkeypatch.setattr(
+        memory_commands, "match_memories", AsyncMock(return_value=[memory_commands._target(record)])
+    )
+    monkeypatch.setattr(
+        module, "get_model", lambda *args, **kwargs: FakeListChatModel(responses=["你好"])
+    )
+    monkeypatch.setattr(module, "get_mem0_service", lambda: memory)
+    graph = module.mem0_chat.copy()
+    graph.checkpointer = MemorySaver()
+    graph.store = InMemoryStore()
+    agents["chatbot"] = graph
+    agents["mem0-chatbot"] = graph
+    auth = headers("7")
+    session = create(client, auth)
+    with connect(client, session, auth) as ws:
+        configure(ws)
+        event(ws, "input.text", text="删除我喜欢茶的记忆")
+        seen = read_until(ws, "response.done")
+        final = [item["data"] for item in seen if item["type"] == "agent.custom"][-1]
+        assert final["status"] == "waiting_confirmation"
+        confirmation = final["confirmation"]["confirmation_id"]
+        event(ws, "memory.confirm", confirmation_id="0" * 64, approved=True)
+        read_until(ws, "response.done")
+        memory.apply_memory_mutation.assert_not_awaited()
+        event(ws, "memory.confirm", confirmation_id=confirmation, approved=True)
+        read_until(ws, "response.done")
+        memory.apply_memory_mutation.assert_awaited_once()
+        assert memory.apply_memory_mutation.await_args.args[0] == "7"
+        event(ws, "memory.confirm", confirmation_id=confirmation, approved=True)
+        read_until(ws, "response.done")
+        memory.apply_memory_mutation.assert_awaited_once()
+        event(ws, "session.close")
+        read_until(ws, "session.closed")
+    restored = client.get(
+        "/chatbot/executions", headers=auth, params={"thread_id": session["thread_id"]}
+    ).json()["data"]["executions"]
+    assert not any(item["confirmation"] for item in restored)
+    assert restored[0]["status"] == "cancelled"

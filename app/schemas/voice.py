@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, TypeAdapter, model_validator
 
 from app.schemas.llm import AllModelEnum
 
@@ -210,6 +210,12 @@ class ApprovalInput(Event):
     value: Any
 
 
+class MemoryConfirmationInput(Event):
+    type: Literal["memory.confirm"]
+    confirmation_id: str = Field(min_length=64, max_length=64, pattern=r"^[a-f0-9]+$")
+    approved: StrictBool
+
+
 class Ping(Event):
     type: Literal["ping"]
 
@@ -228,6 +234,7 @@ ClientEvent = Annotated[
     | PlaybackProgress
     | PlaybackFinished
     | ApprovalInput
+    | MemoryConfirmationInput
     | Ping
     | CloseSession,
     Field(discriminator="type"),

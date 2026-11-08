@@ -299,7 +299,9 @@ async def test_stream_emits_only_chat_tokens(agent_setup, monkeypatch):
         )
     ]
     assert "".join(e.content for e in events if e.type == "token") == "你好。"
-    assert [e.content.content for e in events if e.type == "message"] == ["你好。"]
+    assert [
+        e.content.content for e in events if e.type == "message" and e.content.type == "ai"
+    ] == ["你好。"]
 
 
 @pytest.mark.asyncio
@@ -604,7 +606,9 @@ async def test_first_text_timing_is_logged_once_without_user_content(
     assert "run_id=timing-run" in timings[0] and "duration_ms=" in timings[0]
     assert f"output={'token' if stream_tokens else 'message'}" in timings[0]
     assert "private-question" not in caplog.text and "private-answer" not in caplog.text
-    assert [e.content.content for e in events if e.type == "message"] == ["private-answer"]
+    assert [
+        e.content.content for e in events if e.type == "message" and e.content.type == "ai"
+    ] == ["private-answer"]
 
 
 @pytest.mark.asyncio

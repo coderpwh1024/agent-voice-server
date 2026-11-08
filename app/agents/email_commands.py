@@ -17,6 +17,7 @@ from pydantic import ValidationError
 
 from app.core import settings
 from app.schemas.email_skill import EmailContent, EmailDialogue, EmailIntent, EmailScheduleError
+from app.services.execution import progress
 from app.services.skills.email import (
     EmailSkillRateLimited,
     EmailSkillUnavailable,
@@ -66,6 +67,8 @@ async def handle_email_command(
     model: BaseChatModel,
     config: RunnableConfig,
 ) -> tuple[AIMessage | None, dict[str, Any] | None]:
+    if config.get("configurable", {}).get("memory_confirmation") is not None:
+        return None, saved
     text = message.content
     if not isinstance(text, str):
         return None, None
@@ -81,6 +84,7 @@ async def handle_email_command(
             logger.warning("Discarded invalid email skill dialogue")
     if pending is None and not (EMAIL_HINT.search(text) and SEND_HINT.search(text)):
         return None, None
+    await progress("email.prepare", "检查邮件请求")
     if not settings.EMAIL_SKILL_ENABLED or settings.email_skill is None:
         return _response("邮件发送技能暂未启用。", "unavailable"), None
     if not isinstance(user_id, str) or user_id != values.get("user_id"):
@@ -160,6 +164,8 @@ async def handle_email_command(
         content = EmailContent(subject=intent.subject, body=intent.body)
     except ValidationError:
         return _response("邮件格式不正确，请提供单行主题和非空正文。", "invalid"), None
+    await progress("email.prepare", "检查邮件请求", "succeeded")
+    await progress("email.submit", "提交邮件或预约")
     try:
         request_id = message.id or str(uuid4())
         if intent.send_at is None:

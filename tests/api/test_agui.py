@@ -256,3 +256,40 @@ def test_agui_auth(mock_settings, mock_agui_agent, test_client) -> None:
         headers={"Authorization": "Bearer test-secret"},
     )
     assert response.status_code == 200
+
+
+def test_main_agent_publishes_execution_progress_over_agui(test_client, monkeypatch):
+    import importlib
+
+    from langgraph.store.memory import InMemoryStore
+
+    module = importlib.import_module("app.agents.mem0_chat")
+    graph = module.mem0_chat.copy()
+    graph.checkpointer = MemorySaver()
+    graph.store = InMemoryStore()
+    monkeypatch.setattr(
+        module, "get_model", lambda *args, **kwargs: FakeListChatModel(responses=["Hello"])
+    )
+    monkeypatch.setattr(module, "get_mem0_service", lambda: None)
+    monkeypatch.setattr("app.api.agui.get_agent", lambda _: graph)
+    monkeypatch.setattr(settings, "AUTH_SECRET", None)
+    monkeypatch.setattr(settings, "APP_TOKEN_SECRET", None)
+    monkeypatch.setattr(settings, "LANGFUSE_TRACING", False)
+    response = test_client.post(
+        "/agui/run",
+        json=run_input(
+            thread_id="execution-agui", forwardedProps={"configurable": {"user_id": "42"}}
+        ),
+    )
+    assert response.status_code == 200
+    events = [
+        json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: ")
+    ]
+    progress = [
+        item["value"]
+        for item in events
+        if item.get("type") == "CUSTOM" and item.get("name") == "execution.progress"
+    ]
+    assert progress
+    assert progress[-1]["status"] == "succeeded"
+    assert events[-1]["type"] == "RUN_FINISHED"

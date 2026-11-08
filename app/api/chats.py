@@ -5,7 +5,7 @@ from datetime import UTC, date, datetime
 from typing import Any
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import BaseMessage
 from langchain_core.runnables import RunnableConfig
@@ -32,6 +32,8 @@ from app.schemas import (
     UserThreadsInput,
     api_success,
 )
+from app.schemas.execution import ExecutionList
+from app.schemas.memory_commands import PendingMemoryCommand
 from app.services.agent_runner import graph_events, thread_guard
 from app.services.auth import authorize_thread, bind_user
 from app.services.chat import build_run_input, invoke_agent
@@ -40,6 +42,7 @@ from app.services.chat_records import (
     list_chat_record_days,
     recent_record_dates,
 )
+from app.services.execution import confirmation_id, execution_history
 from app.services.messages import langchain_to_chat_message, messages_from_checkpoint
 from app.services.threads import list_user_threads
 
@@ -120,6 +123,64 @@ async def message_generator(
         logger.exception("Error in message generator")
         yield f"data: {json.dumps({'type': 'error', 'content': 'Internal server error'})}\n\n"
     yield "data: [DONE]\n\n"
+
+
+@router.get("/{agent_id}/executions", operation_id="executions_with_agent_id")
+@router.get("/executions")
+async def executions(
+    request: Request,
+    thread_id: str = Query(min_length=1, max_length=128),
+    user_id: str | None = None,
+    agent_id: str = DEFAULT_AGENT,
+) -> ApiResponse[ExecutionList]:
+    agent = get_agent(agent_id)
+    repo = repository(request)
+    identity = request.state.principal
+    if not identity.admin:
+        bind_user(identity, user_id)
+    await authorize_thread(repo, agent, thread_id, agent_id, identity)
+    owner = await repo.owner(thread_id) if repo else None
+    bound_user = owner[0] if owner else bind_user(identity, user_id)
+    snapshots = await execution_history(getattr(agent, "store", None), bound_user, thread_id)
+    if repo:
+        turns = {turn.response_id: turn for turn in await repo.turns(thread_id)}
+        for snapshot in snapshots:
+            turn = turns.get(snapshot.response_id) if snapshot.response_id else None
+            if turn and not snapshot.text:
+                snapshot.text = turn.generated_text
+    saver = getattr(agent, "checkpointer", None)
+    checkpoint = (
+        await saver.aget_tuple(RunnableConfig(configurable={"thread_id": thread_id}))
+        if saver
+        else None
+    )
+    previous = (
+        ((checkpoint.checkpoint.get("channel_values") or {}).get("__previous__") or {})
+        if checkpoint
+        else {}
+    )
+    pending = (
+        (previous.get("memory_dialogue") or {}).get("pending")
+        if isinstance(previous, dict)
+        else None
+    )
+    current_id = confirmation_id(PendingMemoryCommand.model_validate(pending)) if pending else None
+    checkpoint_at = datetime.fromisoformat(checkpoint.checkpoint["ts"]) if checkpoint else None
+    for snapshot in snapshots:
+        if (
+            snapshot.confirmation
+            and snapshot.confirmation.confirmation_id != current_id
+            and checkpoint_at is not None
+            and snapshot.updated_at <= checkpoint_at
+        ):
+            snapshot.confirmation = None
+            if snapshot.status == "waiting_confirmation":
+                snapshot.status = "cancelled"
+                for step in snapshot.steps:
+                    if step.status == "waiting_confirmation":
+                        step.status = "cancelled"
+                        step.detail = "该确认已处理或被后续请求替代，请查看后续执行结果"
+    return api_success(ExecutionList(executions=snapshots))
 
 
 def _sse_response_example() -> dict[int | str, Any]:
