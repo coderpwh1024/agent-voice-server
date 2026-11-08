@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from pydantic import ValidationError
 
 from app.schemas import ChatHistory, ChatMessage, UserThreads
+from app.schemas.execution import ExecutionSnapshot
 from client import AgentClient, AgentClientError
 from client.task_data import TaskData, TaskDataStatus
 from client.voice import VoiceManager
@@ -354,6 +355,7 @@ async def draw_messages(
     # Placeholder for intermediate streaming tokens
     streaming_content = ""
     streaming_placeholder = None
+    execution_placeholders = {}
 
     # Iterate over the messages and draw them
     while msg := await anext(messages_agen, None):
@@ -395,6 +397,13 @@ async def draw_messages(
                     st.session_state.last_message = st.chat_message("ai")
 
                 with st.session_state.last_message:
+                    execution = (
+                        ExecutionSnapshot.model_validate(msg.response_metadata["execution"])
+                        if "execution" in msg.response_metadata
+                        else None
+                    )
+                    if execution is not None and execution.run_id not in execution_placeholders:
+                        draw_execution(execution)
                     # If the message has content, write it out.
                     # Reset the streaming variables to prepare for the next message.
                     if msg.content:
@@ -453,6 +462,19 @@ async def draw_messages(
                             status.update(state="complete")
 
             case "custom":
+                if msg.custom_data.get("type") == "execution.progress":
+                    execution = ExecutionSnapshot.model_validate(msg.custom_data)
+                    if last_message_type != "ai":
+                        last_message_type = "ai"
+                        st.session_state.last_message = st.chat_message("ai")
+                    with st.session_state.last_message:
+                        placeholder = execution_placeholders.get(execution.run_id)
+                        if placeholder is None:
+                            placeholder = st.empty()
+                            execution_placeholders[execution.run_id] = placeholder
+                        with placeholder.container():
+                            draw_execution(execution)
+                    continue
                 try:
                     task_data: TaskData = TaskData.model_validate(msg.custom_data)
                 except ValidationError:
@@ -478,6 +500,26 @@ async def draw_messages(
                 st.error(f"Unexpected ChatMessage type: {msg.type}")
                 st.write(msg)
                 st.stop()
+
+
+def draw_execution(execution: ExecutionSnapshot) -> None:
+    labels = {
+        "running": "进行中",
+        "succeeded": "已完成",
+        "warning": "需留意",
+        "failed": "失败",
+        "cancelled": "已停止",
+        "waiting_input": "等待补充信息",
+        "waiting_confirmation": "等待确认",
+        "unknown": "结果待核实",
+    }
+    with st.expander(
+        "执行过程 · " + labels[execution.status], expanded=execution.status != "succeeded"
+    ):
+        for step in execution.steps:
+            st.write(f"{step.label} · {labels[step.status]}")
+            if step.detail:
+                st.caption(step.detail)
 
 
 async def handle_feedback() -> None:
