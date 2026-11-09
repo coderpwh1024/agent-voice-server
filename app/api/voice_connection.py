@@ -242,6 +242,9 @@ class VoiceConnection:
         confirmation: dict | None = None,
         wake_greeting: bool = False,
     ) -> None:
+        if self.session.input_mode == "transcription":
+            await self.emit("error", code="transcription_only", recoverable=True)
+            return
         if self.pending and resume is None:
             await self.emit("error", code="approval_required", recoverable=True)
             return
@@ -296,6 +299,9 @@ class VoiceConnection:
             if message["type"] == "websocket.disconnect":
                 return
             if message.get("bytes") is not None:
+                if self.session.input_mode == "text":
+                    await self.emit("error", code="audio_input_disabled", recoverable=True)
+                    continue
                 kind, connection, response, segment, seq, pcm = decode_audio(message["bytes"])
                 if (
                     kind != 1
@@ -330,7 +336,9 @@ class VoiceConnection:
                 case TextInput():
                     await self.submit(event.text, event.event_id)
                 case CommitInput():
-                    if self.session.turn_detection != "manual":
+                    if self.session.input_mode == "text":
+                        await self.emit("error", code="audio_input_disabled", recoverable=True)
+                    elif self.session.turn_detection != "manual":
                         await self.emit(
                             "error", code="commit_requires_manual_mode", recoverable=True
                         )
@@ -340,6 +348,8 @@ class VoiceConnection:
                 case CancelResponse():
                     await self.cancel_response(str(event.response_id), "client")
                 case SpeechHint():
+                    if self.session.input_mode != "conversation":
+                        continue
                     if self.speech_hint_task:
                         self.speech_hint_task.cancel()
                     self.speech_hint_task = asyncio.create_task(self.resume_after_hint())
@@ -426,12 +436,20 @@ class VoiceConnection:
                     await self.emit(
                         "transcript.partial",
                         input_id=item_id,
-                        text="" if is_non_actionable_voice_text(text) else text,
+                        text=(
+                            ""
+                            if self.session.input_mode != "transcription"
+                            and is_non_actionable_voice_text(text)
+                            else text
+                        ),
                     )
                 case "conversation.item.input_audio_transcription.completed":
                     input_id = f"{self.connection_id}:{item_id}"
                     if self.remember(input_id):
                         text = event.get("transcript", "")
+                        if self.session.input_mode == "transcription":
+                            await self.emit("transcript.final", input_id=input_id, text=text)
+                            continue
                         if (
                             not self.wake_transcript_pending
                             and self.session.activation == "wake_word"
@@ -813,30 +831,37 @@ class VoiceConnection:
             self.session.status = "connected"
             self.session.connection_id = self.connection_id
             await self.repo.save_session(self.session)
-            async with self.provider.recognize(self.session) as asr:
+            recognition = (
+                self.provider.recognize(self.session)
+                if self.session.input_mode != "text"
+                else contextlib.nullcontext()
+            )
+            async with recognition as asr:
                 self.wake_confirmation_started = time.monotonic()
-                tasks = [
-                    asyncio.create_task(f())
-                    for f in (
-                        self.sender,
-                        self.receiver,
-                        lambda: self.upload(asr),
-                        lambda: self.recognize(asr),
-                        self.timer,
-                        self.closed.wait,
+                tasks = [asyncio.create_task(self.sender()), asyncio.create_task(self.receiver())]
+                if asr is not None:
+                    tasks.extend(
+                        [
+                            asyncio.create_task(self.upload(asr)),
+                            asyncio.create_task(self.recognize(asr)),
+                        ]
                     )
-                ]
+                tasks.extend(
+                    [asyncio.create_task(self.timer()), asyncio.create_task(self.closed.wait())]
+                )
                 worker = asyncio.create_task(self.worker())
                 await self.emit(
                     "session.ready",
                     protocol_version=1,
+                    input_mode=self.session.input_mode,
                     input_format="pcm16_16000_mono",
                     output_format="pcm16_24000_mono",
                     audio_header_bytes=45,
                 )
                 if self.session.activation == "wake_word" and not self.wake_transcript_pending:
                     await self.emit("wake.accepted", keyword=self.session.wake_word)
-                await self.restore_approvals()
+                if self.session.input_mode != "transcription":
+                    await self.restore_approvals()
                 done, _ = await asyncio.wait([*tasks, worker], return_when=asyncio.FIRST_COMPLETED)
                 for task in done:
                     task.result()

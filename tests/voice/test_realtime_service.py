@@ -352,6 +352,129 @@ def configure(ws):
     return read_until(ws, "session.ready")[-1]
 
 
+def test_text_mode_skips_asr_and_keeps_agent_tts_and_history(voice_env, monkeypatch):
+    import app.api.voice as voice_routes
+
+    class NoRecognitionSpeech(FakeSpeech):
+        @asynccontextmanager
+        async def recognize(self, session):
+            raise SpeechProviderError("ASR is unavailable")
+            yield self
+
+    monkeypatch.setattr(voice_routes, "AlibabaRealtime", NoRecognitionSpeech)
+    client, repo, agents, headers = voice_env
+    auth = headers()
+    session = create(client, auth, input_mode="text")
+    with connect(client, session, auth) as ws:
+        ready = configure(ws)
+        assert ready["input_mode"] == "text"
+        ws.send_bytes(b"unexpected microphone data")
+        assert read_until(ws, "error")[-1]["code"] == "audio_input_disabled"
+        event(ws, "input.commit")
+        assert read_until(ws, "error")[-1]["code"] == "audio_input_disabled"
+        event(ws, "input.text", text="键盘输入")
+        seen = read_until(ws, "response.done")
+        assert any(item["type"] == "audio" for item in seen)
+        assert seen[-1]["execution_status"] == "completed"
+        assert seen[-1]["audio_status"] == "completed"
+        event(ws, "playback.finished", response_id=seen[-1]["response_id"])
+        event(ws, "session.close")
+        read_until(ws, "session.closed")
+    assert [turn.input_text for turn in repo.records.values()] == ["键盘输入"]
+    history = client.post(
+        "/chatbot/history", json={"thread_id": session["thread_id"]}, headers=auth
+    ).json()["data"]["messages"]
+    assert [message["type"] for message in history] == ["human", "ai"]
+    assert history[0]["content"] == "键盘输入"
+
+
+@pytest.mark.parametrize("transcript", ["你好", "嗯", ""])
+def test_dictation_only_runs_agent_after_explicit_text_send(voice_env, monkeypatch, transcript):
+    import app.api.voice as voice_routes
+
+    class DictationSpeech(FakeSpeech):
+        async def commit_audio(self, ws):
+            for _ in range(2):
+                await self.events.put(
+                    {
+                        "type": "conversation.item.input_audio_transcription.completed",
+                        "item_id": "dictation",
+                        "transcript": transcript,
+                    }
+                )
+
+        async def synthesize(self, ws, text):
+            raise AssertionError("Dictation must not synthesize speech")
+            yield b""
+
+    monkeypatch.setattr(voice_routes, "AlibabaRealtime", DictationSpeech)
+    client, repo, agents, headers = voice_env
+    auth = headers()
+    session = create(client, auth, input_mode="transcription", turn_detection="manual")
+    with connect(client, session, auth) as ws:
+        assert configure(ws)["input_mode"] == "transcription"
+        event(ws, "input.text", text="不可自动执行")
+        assert read_until(ws, "error")[-1]["code"] == "transcription_only"
+        event(ws, "memory.confirm", confirmation_id="a" * 64, approved=True)
+        assert read_until(ws, "error")[-1]["code"] == "transcription_only"
+        event(ws, "input.commit")
+        seen = read_until(ws, "transcript.final")
+        assert seen[-1]["text"] == transcript
+        event(ws, "ping")
+        seen += read_until(ws, "pong")
+        assert sum(item["type"] == "transcript.final" for item in seen) == 1
+        assert not repo.records
+        assert not any(item["type"] in {"input.accepted", "text.delta", "audio"} for item in seen)
+        event(ws, "session.close")
+        read_until(ws, "session.closed")
+    history = client.post(
+        "/chatbot/history", json={"thread_id": session["thread_id"]}, headers=auth
+    ).json()["data"]["messages"]
+    assert history == []
+    monkeypatch.setattr(voice_routes, "AlibabaRealtime", FakeSpeech)
+    text_session = create(client, auth, input_mode="text", thread_id=session["thread_id"])
+    with connect(client, text_session, auth) as ws:
+        configure(ws)
+        event(ws, "input.text", text=transcript + "，已编辑")
+        seen = read_until(ws, "response.done")
+        assert any(item["type"] == "audio" for item in seen)
+        event(ws, "session.close")
+        read_until(ws, "session.closed")
+    assert [turn.input_text for turn in repo.records.values()] == [transcript + "，已编辑"]
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"input_mode": "unknown"},
+        {"input_mode": "transcription"},
+        {"input_mode": "text", "activation": "wake_word", "wake_word": "小美小美"},
+        {
+            "input_mode": "transcription",
+            "turn_detection": "manual",
+            "activation": "wake_word",
+            "wake_word": "小美小美",
+        },
+    ],
+)
+def test_input_modes_reject_incompatible_configuration(voice_env, body):
+    client, repo, agents, headers = voice_env
+    assert client.post("/voice/sessions", headers=headers(), json=body).status_code == 422
+    assert not repo.sessions
+
+
+def test_input_modes_preserve_default_and_session_ownership(voice_env):
+    client, repo, agents, headers = voice_env
+    auth = headers()
+    modes = client.get("/voice/capabilities", headers=auth).json()["data"]["input_modes"]
+    assert modes == ["conversation", "text", "transcription"]
+    session = create(client, auth)
+    assert session["input_mode"] == "conversation"
+    for mode in ("text", "transcription"):
+        body = {"input_mode": mode, "thread_id": session["thread_id"], "turn_detection": "manual"}
+        assert client.post("/voice/sessions", headers=headers("bob"), json=body).status_code == 403
+
+
 def test_voice_roundtrip_streams_and_persists(voice_env):
     client, repo, agents, headers = voice_env
     auth = headers()
@@ -1203,11 +1326,12 @@ def test_tokens_bind_user_and_protect_every_thread_entry(voice_env):
     assert response.status_code == 403
 
 
-def test_cancel_invalidates_audio_and_recovers_functional_history(voice_env):
+@pytest.mark.parametrize("input_mode", ["conversation", "text"])
+def test_cancel_invalidates_audio_and_recovers_functional_history(voice_env, input_mode):
     client, repo, agents, headers = voice_env
     agents["chatbot"] = build_chatbot(["第一句话。" + "后续内容" * 100, "新的回答。"], sleep=0.003)
     auth = headers()
-    session = create(client, auth)
+    session = create(client, auth, input_mode=input_mode)
     with connect(client, session, auth) as ws:
         configure(ws)
         event(ws, "input.text", text="第一个问题")
@@ -1240,10 +1364,11 @@ def test_cancel_invalidates_audio_and_recovers_functional_history(voice_env):
     assert any("第一句话。" in c and "语音播放记录" in c for c in contents)
 
 
-def test_reconnect_deduplicates_text_and_rejects_second_socket(voice_env):
+@pytest.mark.parametrize("input_mode", ["conversation", "text"])
+def test_reconnect_deduplicates_text_and_rejects_second_socket(voice_env, input_mode):
     client, repo, agents, headers = voice_env
     auth = headers()
-    session = create(client, auth)
+    session = create(client, auth, input_mode=input_mode)
     message = {"type": "input.text", "event_id": "stable-input", "text": "只执行一次"}
     with connect(client, session, auth) as ws:
         configure(ws)
@@ -1262,7 +1387,8 @@ def test_reconnect_deduplicates_text_and_rejects_second_socket(voice_env):
     assert len(repo.records) == 1
 
 
-def test_business_interrupt_requires_explicit_approval(voice_env):
+@pytest.mark.parametrize("input_mode", ["conversation", "text"])
+def test_business_interrupt_requires_explicit_approval(voice_env, input_mode):
     client, repo, agents, headers = voice_env
 
     async def ask(state):
@@ -1275,7 +1401,7 @@ def test_business_interrupt_requires_explicit_approval(voice_env):
     graph.add_edge("ask", END)
     agents["approval"] = graph.compile(checkpointer=MemorySaver())
     auth = headers()
-    session = create(client, auth, agent_id="approval")
+    session = create(client, auth, agent_id="approval", input_mode=input_mode)
     with connect(client, session, auth) as ws:
         configure(ws)
         event(ws, "input.text", text="开始")

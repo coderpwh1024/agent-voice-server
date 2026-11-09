@@ -67,6 +67,7 @@ async def capabilities(request: Request) -> ApiResponse[dict[str, Any]]:
             "tts_model": settings.VOICE_REALTIME_TTS_MODEL,
             "voice_catalog_model": settings.VOICE_REALTIME_TTS_MODEL,
             "turn_detection_modes": ["server_vad", "manual"],
+            "input_modes": ["conversation", "text", "transcription"],
             "session_seconds": settings.VOICE_SESSION_SECONDS,
             "wake_word": {
                 "enabled": settings.VOICE_WAKE_ENABLED,

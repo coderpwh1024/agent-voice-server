@@ -5823,6 +5823,16 @@
             "title": "Turn Detection",
             "default": "server_vad"
           },
+          "input_mode": {
+            "type": "string",
+            "enum": [
+              "conversation",
+              "text",
+              "transcription"
+            ],
+            "title": "Input Mode",
+            "default": "conversation"
+          },
           "activation": {
             "type": "string",
             "enum": [
@@ -6008,6 +6018,16 @@
             ],
             "title": "Turn Detection",
             "default": "server_vad"
+          },
+          "input_mode": {
+            "type": "string",
+            "enum": [
+              "conversation",
+              "text",
+              "transcription"
+            ],
+            "title": "Input Mode",
+            "default": "conversation"
           },
           "activation": {
             "type": "string",

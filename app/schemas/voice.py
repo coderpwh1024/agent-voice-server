@@ -7,6 +7,7 @@ from typing import Annotated, Any, Literal
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, TypeAdapter, model_validator
+from pydantic_core import PydanticCustomError
 
 from app.schemas.llm import AllModelEnum
 
@@ -53,6 +54,7 @@ class VoiceSessionInput(BaseModel):
     voice: str | None = Field(default=None, min_length=1, max_length=100)
     language: Literal["zh", "en", "auto"] = "zh"
     turn_detection: Literal["server_vad", "manual"] = "server_vad"
+    input_mode: Literal["conversation", "text", "transcription"] = "conversation"
     activation: Literal["tap", "wake_word"] = "tap"
     wake_word: str | None = Field(default=None, min_length=1, max_length=40)
     wake_engine: str | None = Field(default=None, min_length=1, max_length=100)
@@ -60,6 +62,14 @@ class VoiceSessionInput(BaseModel):
 
     @model_validator(mode="after")
     def validate_activation(self) -> "VoiceSessionInput":
+        if self.input_mode != "conversation" and self.activation != "tap":
+            raise PydanticCustomError(
+                "input_mode_activation", "text and transcription modes require tap activation"
+            )
+        if self.input_mode == "transcription" and self.turn_detection != "manual":
+            raise PydanticCustomError(
+                "input_mode_turn_detection", "transcription mode requires manual turn detection"
+            )
         if self.activation == "wake_word" and not self.wake_word:
             raise ValueError("wake_word is required for wake-word activation")
         if self.activation == "tap" and (
@@ -89,6 +99,7 @@ class VoiceSession(BaseModel):
     voice: str
     language: Literal["zh", "en", "auto"] = "zh"
     turn_detection: Literal["server_vad", "manual"] = "server_vad"
+    input_mode: Literal["conversation", "text", "transcription"] = "conversation"
     activation: Literal["tap", "wake_word"] = "tap"
     wake_word: str | None = None
     wake_engine: str | None = None

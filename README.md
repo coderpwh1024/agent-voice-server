@@ -143,6 +143,24 @@ Flutter 客户端在助手消息中展示可折叠步骤，历史详情复用同
 服务地址变化或销毁控制器后停止刷新。视频每 10 秒查询，单个任务最多自动查询 120 次，
 用户仍可进入详情刷新。停止回答不撤回已提交的邮件或视频任务。
 
+语音页面支持三种 `POST /voice/sessions` 的 `input_mode`，可通过
+`GET /voice/capabilities` 的 `input_modes` 查询：
+
+- `conversation`（默认）：保留原有点击或唤醒双工、ASR 自动提交和 TTS 播放。
+- `text`：不连接 ASR、不需要麦克风；发送 WebSocket `input.text`，复用原有 Agent、
+  邮件/视频/记忆工具、确认、执行状态、文字流和 TTS。二进制输入及 `input.commit`
+  返回可恢复的 `audio_input_disabled` 错误。
+- `transcription`：要求 `activation="tap"`、`turn_detection="manual"`，实时发送原有
+  PCM 帧，结束录音后发送 `input.commit`；`transcript.partial` 用于识别预览，
+  `transcript.final` 表示本次提交的转写完成（可能为空）。仅转写不调用 Agent、不写入
+  对话消息、不触发工具或 TTS；业务输入返回可恢复的 `transcription_only` 错误。
+
+客户端将听写文字回填输入框供用户编辑，关闭并删除仅转写会话释放容量，随后使用同一
+`thread_id` 创建 `text` 会话，在用户点击发送后提交 `input.text`。文本与听写模式都要求
+点击激活，不需要唤醒词。`session.ready` 返回实际 `input_mode`；省略该字段的旧请求与
+已有持久化会话继续使用 `conversation`。所有模式沿用认证、用户绑定、线程所有权、
+输入幂等、取消、播放确认和会话上限规则。没有执行过 Agent 的新线程历史返回空消息列表。
+
 ## 配置与运行
 
 项目支持 Python 3.12–3.14，固定 uv 版本见 `deploy/uv-version`。参考 `.env.example` 和 `config/environments/` 准备 Nacos、PostgreSQL 和对应模型配置后运行：
