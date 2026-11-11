@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1680" height="1530" viewBox="0 0 1680 1530" role="img" aria-labelledby="title desc">
+<title id="title">页面上的 2.7 秒，计到哪里？</title>
+<desc id="desc">普通聊天的示例时间轴。回复处理从0秒到2.7秒，0.6秒首次出现文字，语音与文字并行，1秒开始出声，6秒播放结束。所有数值仅为示例，零点位于语音识别与上下文准备之后。</desc>
+<rect x="0" y="0" width="1680" height="1530" rx="0" fill="#F7F9FC" />
+<rect x="60" y="50" width="7" height="30" rx="3" fill="#365EDC" />
+<text x="82" y="49" dominant-baseline="text-before-edge" text-anchor="start" font-family="Hiragino Sans GB,PingFang SC,Noto Sans CJK SC,sans-serif" font-size="24" font-weight="400" fill="#58677D">语音对话 · 计时说明</text>
+<text x="60" y="108" dominant-baseline="text-before-edge" text-anchor="start" font-family="STHeiti,PingFang SC,Noto Sans CJK SC,sans-serif" font-size="58" font-weight="500" fill="#17253D">页面上的 2.7 秒，计到哪里？</text>
+<text x="60" y="195" dominant-baseline="text-before-edge" text-anchor="start" font-family="Hiragino Sans GB,PingFang SC,Noto Sans CJK SC,sans-serif" font-size="32" font-weight="400" fill="#17253D">从后端开始处理回复，到完整文字回复生成结束。</text>
+<text x="60" y="249" dominant-baseline="text-before-edge" text-anchor="start" font-family="Hiragino Sans GB,PingFang SC,Noto Sans CJK SC,sans-serif" font-size="24" font-weight="400" fill="#58677D">普通聊天示意 · 0.6 / 1.0 / 2.7 / 6.0 秒均为举例，非真实请求测量</text>
+<rect x="60" y="310" width="1560" height="120" rx="18" fill="#FFFFFF" />
+<text x="86" y="330" dominant-baseline="text-before-edge" text-anchor="start" font-family="STHeiti,PingFang SC,Noto Sans CJK SC,sans-serif" font-size="26" font-weight="500" fill="#17253D">计时之前</text>
+<text x="86" y="371" dominant-baseline="text-before-edge" text-anchor="start" font-family="Hiragino Sans GB,PingFang SC,Noto Sans CJK SC,sans-serif" font-size="23" font-weight="400" fill="#58677D">不计入 2.7 秒</text>
+<text x="480" y="349" dominant-baseline="text-before-edge" text-anchor="middle" font-family="Hiragino Sans GB,PingFang SC,Noto Sans CJK SC,sans-serif" font-size="27" font-weight="400" fill="#17253D">用户说完 / 点击发送</text>
+<text x="930" y="349" dominant-baseline="text-before-edge" text-anchor="middle" font-family="Hiragino Sans GB,PingFang SC,Noto Sans CJK SC,sans-serif" font-size="27" font-weight="400" fill="#17253D">语音识别（文字输入跳过）</text>
+<text x="1410" y="349" dominant-baseline="text-before-edge" text-anchor="middle" font-family="Hiragino Sans GB,PingFang SC,Noto Sans CJK SC,sans-serif" font-size="27" font-weight="400" fill="#17253D">上下文 / 记忆准备</text>
+<line x1="660" y1="365" x2="710" y2="365" stroke="#58677D" stroke-width="2" />
+<line x1="702" y1="359" x2="710" y2="365" stroke="#58677D" stroke-width="2" />
+<line x1="702" y1="371" x2="710" y2="365" stroke="#58677D" stroke-width="2" />
+<line x1="1180" y1="365" x2="1230" y2="365" stroke="#58677D" stroke-width="2" />
+<line x1="1222" y1="359" x2="1230" y2="365" stroke="#58677D" stroke-width="2" />
+<line x1="1222" y1="371" x2="1230" y2="365" stroke="#58677D" stroke-width="2" />
+<text x="60" y="452" dominant-baseline="text-before-edge" text-anchor="start" font-family="Hiragino Sans GB,PingFang SC,Noto Sans CJK SC,sans-serif" font-size="26" font-weight="400" fill="#58677D">下图 0 秒 = 后端进入「生成回复」阶段；不是用户说完的时刻。</text>
+<rect x="60" y="514" width="1560" height="545" rx="20" fill="#FFFFFF" />
+<line x1="360" y1="590" x2="1560" y2="590" stroke="#DCE3EF" stroke-width="2" />
+<line x1="360" y1="590" x2="360" y2="975" stroke="#DCE3EF" stroke-width="1" stroke-dasharray="5 7" />
+<circle cx="360" cy="590" r="4" fill="#7B8AA4" />
+<text x="360" y="541" dominant-baseline="text-before-edge" text-anchor="middle" font-family="Hiragino Sans GB,PingFang SC,Noto Sans CJK SC,sans-serif" font-size="25" font-weight="400" fill="#58677D">0 秒</text>
+<line x1="480.0" y1="590" x2="480.0" y2="975" stroke="#DCE3EF" stroke-width="1" stroke-dasharray="5 7" />
+<circle cx="480.0" cy="590" r="4" fill="#7B8AA4" />
+<text x="480.0" y="541" dominant-baseline="text-before-edge" text-anchor="middle" font-family="Hiragino Sans GB,PingFang SC,Noto Sans CJK SC,sans-serif" font-size="25" font-weight="400" fill="#58677D">0.6 秒</text>
+<line x1="560" y1="590" x2="560" y2="975" stroke="#DCE3EF" stroke-width="1" stroke-dasharray="5 7" />
+<circle cx="560" cy="590" r="4" fill="#7B8AA4" />
+<line x1="900.0" y1="590" x2="900.0" y2="975" stroke="#DCE3EF" stroke-width="1" stroke-dasharray="5 7" />
+<circle cx="900.0" cy="590" r="4" fill="#365EDC" />
+<text x="900.0" y="541" dominant-baseline="text-before-edge" text-anchor="middle" font-family="STHeiti,PingFang SC,Noto Sans CJK SC,sans-serif" font-size="25" font-weight="500" fill="#365EDC">2.7 秒</text>
+<line x1="1560" y1="590" x2="1560" y2="975" stroke="#DCE3EF" stroke-width="1" stroke-dasharray="5 7" />
+<circle cx="1560" cy="590" r="4" fill="#7B8AA4" />
+<text x="1560" y="541" dominant-baseline="text-before-edge" text-anchor="middle" font-family="Hiragino Sans GB,PingFang SC,Noto Sans CJK SC,sans-serif" font-size="25" font-weight="400" fill="#58677D">6.0 秒</text>
+<rect x="360" y="617" width="540.0" height="127" rx="14" fill="#EAF0FF" />
+<text x="88" y="647" dominant-baseline="text-before-edge" text-anchor="start" font-family="Hiragino Sans GB,PingFang SC,Noto Sans CJK SC,sans-serif" font-size="24" font-weight="400" fill="#58677D">后端</text>
+<text x="88" y="685" dominant-baseline="text-before-edge" text-anchor="start" font-family="STHeiti,PingFang SC,Noto Sans CJK SC,sans-serif" font-size="30" font-weight="500" fill="#17253D">生成回复</text>
+<rect x="360" y="665" width="120.0" height="55" rx="9" fill="#B9CBFF" />
+<rect x="480.0" y="665" width="420.0" height="55" rx="9" fill="#365EDC" />
+<text x="420.0" y="676" dominant-baseline="text-before-edge" text-anchor="middle" font-family="Hiragino Sans GB,PingFang SC,Noto Sans CJK SC,sans-serif" font-size="25" font-weight="400" fill="#17253D">等首字</text>
+<text x="690.0" y="675" dominant-baseline="text-before-edge" text-anchor="middle" font-family="Hiragino Sans GB,PingFang SC,Noto Sans CJK SC,sans-serif" font-size="27" font-weight="400" fill="#FFFFFF">持续生成全部文字</text>
+<text x="378" y="625" dominant-baseline="text-before-edge" text-anchor="start" font-family="STHeiti,PingFang SC,Noto Sans CJK SC,sans-serif" font-size="25" font-weight="500" fill="#365EDC">页面计时范围：0 → 2.7 秒</text>
+<circle cx="900.0" cy="692" r="7" fill="#365EDC" />
+<text x="927.0" y="668" dominant-baseline="text-before-edge" text-anchor="start" font-family="STHeiti,PingFang SC,Noto Sans CJK SC,sans-serif" font-size="29" font-weight="500" fill="#365EDC">完整文字已生成</text>
+<text x="927.0" y="711" dominant-baseline="text-before-edge" text-anchor="start" font-family="Hiragino Sans GB,PingFang SC,Noto Sans CJK SC,sans-serif" font-size="24" font-weight="400" fill="#58677D">此时显示「生成回复 · 完成」</text>
+<text x="88" y="786" dominant-baseline="text-before-edge" text-anchor="start" font-family="Hiragino Sans GB,PingFang SC,Noto Sans CJK SC,sans-serif" font-size="24" font-weight="400" fill="#58677D">后端</text>
+<text x="88" y="824" dominant-baseline="text-before-edge" text-anchor="start" font-family="STHeiti,PingFang SC,Noto Sans CJK SC,sans-serif" font-size="28" font-weight="500" fill="#17253D">语音合成 / 传输</text>
+<rect x="504.0" y="800" width="576.0" height="57" rx="10" fill="#DBEFE9" />
+<text x="792.0" y="811" dominant-baseline="text-before-edge" text-anchor="middle" font-family="Hiragino Sans GB,PingFang SC,Noto Sans CJK SC,sans-serif" font-size="26" font-weight="400" fill="#1C806D">按短句分段合成、分段传输</text>
+<text x="1100.0" y="814" dominant-baseline="text-before-edge" text-anchor="start" font-family="Hiragino Sans GB,PingFang SC,Noto Sans CJK SC,sans-serif" font-size="23" font-weight="400" fill="#58677D">结束时刻也取决于合成与传输</text>
+<line x1="480.0" y1="720" x2="480.0" y2="780" stroke="#365EDC" stroke-width="2" />
+<line x1="480.0" y1="780" x2="504.0" y2="780" stroke="#365EDC" stroke-width="2" />
+<line x1="504.0" y1="780" x2="504.0" y2="800" stroke="#365EDC" stroke-width="2" />
+<text x="88" y="909" dominant-baseline="text-before-edge" text-anchor="start" font-family="Hiragino Sans GB,PingFang SC,Noto Sans CJK SC,sans-serif" font-size="24" font-weight="400" fill="#58677D">手机</text>
+<text x="88" y="947" dominant-baseline="text-before-edge" text-anchor="start" font-family="STHeiti,PingFang SC,Noto Sans CJK SC,sans-serif" font-size="30" font-weight="500" fill="#17253D">实际播放</text>
+<rect x="560" y="921" width="1000" height="57" rx="10" fill="#1C806D" />
+<text x="1060.0" y="932" dominant-baseline="text-before-edge" text-anchor="middle" font-family="Hiragino Sans GB,PingFang SC,Noto Sans CJK SC,sans-serif" font-size="27" font-weight="400" fill="#FFFFFF">边接收音频，边持续播放</text>
+<circle cx="560" cy="949" r="7" fill="#135F51" />
+<circle cx="1560" cy="949" r="7" fill="#135F51" />
+<text x="560" y="992" dominant-baseline="text-before-edge" text-anchor="middle" font-family="STHeiti,PingFang SC,Noto Sans CJK SC,sans-serif" font-size="25" font-weight="500" fill="#1C806D">1.0 秒 · 首次出声</text>
+<text x="1560" y="992" dominant-baseline="text-before-edge" text-anchor="end" font-family="STHeiti,PingFang SC,Noto Sans CJK SC,sans-serif" font-size="25" font-weight="500" fill="#1C806D">6.0 秒 · 整段播完</text>
+<text x="60" y="1090" dominant-baseline="text-before-edge" text-anchor="start" font-family="STHeiti,PingFang SC,Noto Sans CJK SC,sans-serif" font-size="32" font-weight="500" fill="#17253D">看这三个时间点，就不会混淆</text>
+<rect x="60" y="1152" width="480" height="152" rx="16" fill="#FFFFFF" />
+<text x="85" y="1169" dominant-baseline="text-before-edge" text-anchor="start" font-family="STHeiti,PingFang SC,Noto Sans CJK SC,sans-serif" font-size="43" font-weight="500" fill="#17253D">0.6 秒</text>
+<text x="515" y="1187" dominant-baseline="text-before-edge" text-anchor="end" font-family="Hiragino Sans GB,PingFang SC,Noto Sans CJK SC,sans-serif" font-size="26" font-weight="400" fill="#17253D">首字出现</text>
+<text x="85" y="1237" dominant-baseline="text-before-edge" text-anchor="start" font-family="Hiragino Sans GB,PingFang SC,Noto Sans CJK SC,sans-serif" font-size="25" font-weight="400" fill="#58677D">等到第一小段文字</text>
+<rect x="560" y="1152" width="560" height="152" rx="16" fill="#EAF0FF" />
+<text x="585" y="1169" dominant-baseline="text-before-edge" text-anchor="start" font-family="STHeiti,PingFang SC,Noto Sans CJK SC,sans-serif" font-size="43" font-weight="500" fill="#365EDC">2.7 秒</text>
+<text x="1095" y="1187" dominant-baseline="text-before-edge" text-anchor="end" font-family="Hiragino Sans GB,PingFang SC,Noto Sans CJK SC,sans-serif" font-size="26" font-weight="400" fill="#365EDC">完整回复处理</text>
+<text x="585" y="1237" dominant-baseline="text-before-edge" text-anchor="start" font-family="Hiragino Sans GB,PingFang SC,Noto Sans CJK SC,sans-serif" font-size="25" font-weight="400" fill="#58677D">这才是页面显示的时间</text>
+<rect x="1140" y="1152" width="480" height="152" rx="16" fill="#FFFFFF" />
+<text x="1165" y="1169" dominant-baseline="text-before-edge" text-anchor="start" font-family="STHeiti,PingFang SC,Noto Sans CJK SC,sans-serif" font-size="43" font-weight="500" fill="#17253D">1.0 秒</text>
+<text x="1595" y="1187" dominant-baseline="text-before-edge" text-anchor="end" font-family="Hiragino Sans GB,PingFang SC,Noto Sans CJK SC,sans-serif" font-size="26" font-weight="400" fill="#17253D">首次出声</text>
+<text x="1165" y="1237" dominant-baseline="text-before-edge" text-anchor="start" font-family="Hiragino Sans GB,PingFang SC,Noto Sans CJK SC,sans-serif" font-size="25" font-weight="400" fill="#58677D">等到手机开始播放</text>
+<line x1="60" y1="1344" x2="1620" y2="1344" stroke="#DCE3EF" stroke-width="2" />
+<text x="60" y="1373" dominant-baseline="text-before-edge" text-anchor="start" font-family="STHeiti,PingFang SC,Noto Sans CJK SC,sans-serif" font-size="29" font-weight="500" fill="#17253D">文字与语音并行：已经出声时，模型可能还在继续生成文字。</text>
+<text x="60" y="1424" dominant-baseline="text-before-edge" text-anchor="start" font-family="Hiragino Sans GB,PingFang SC,Noto Sans CJK SC,sans-serif" font-size="25" font-weight="400" fill="#58677D">用户体感首响 = 说完后，到手机首次出声；还要包含前面的识别与准备时间。</text>
+<text x="60" y="1470" dominant-baseline="text-before-edge" text-anchor="start" font-family="Hiragino Sans GB,PingFang SC,Noto Sans CJK SC,sans-serif" font-size="23" font-weight="400" fill="#58677D">工具场景还可能包含工具处理；2.7 秒不是纯推理耗时。阶段内开销、完整口径见配套说明。</text>
+</svg>
