@@ -76,6 +76,11 @@ _NESTED_SETTINGS: dict[str, Any] = {
         },
     },
     "memory": {
+        "local": {
+            "enabled": "LOCAL_MEMORY_ENABLED",
+            "extraction_timeout_seconds": "LOCAL_MEMORY_EXTRACTION_TIMEOUT_SECONDS",
+            "context_timeout_seconds": "LOCAL_MEMORY_CONTEXT_TIMEOUT_SECONDS",
+        },
         "mem0": {
             "prompt_keys": "MEM0_PROMPT_KEYS",
             "prompt_label": "MEM0_PROMPT_LABEL",

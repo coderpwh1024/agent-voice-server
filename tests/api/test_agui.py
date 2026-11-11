@@ -200,6 +200,57 @@ def test_agui_configurable_reserved_keys(mock_agui_agent, test_client) -> None:
     assert "reserved" in response.json()["detail"]
 
 
+def test_agui_device_references_reach_only_the_current_run(test_client, monkeypatch):
+    from uuid import uuid4
+
+    from app.services.memory.local_context import device_memory
+
+    observed = []
+
+    async def read_scope(state: MessagesState, config: RunnableConfig) -> MessagesState:
+        values = config["configurable"]
+        assert "local_memory" not in values and "memory_mode" not in values
+        observed.append(device_memory(values["user_id"], values["thread_id"]))
+        return {"messages": [AIMessage(content="收到")]}
+
+    builder = StateGraph(MessagesState)
+    builder.add_node("read", read_scope)
+    builder.set_entry_point("read")
+    builder.add_edge("read", END)
+    graph = builder.compile(checkpointer=MemorySaver())
+    monkeypatch.setattr("app.api.agui.get_agent", lambda _: graph)
+    monkeypatch.setattr(settings, "LOCAL_MEMORY_ENABLED", True)
+    reference = {"id": str(uuid4()), "category": "profile", "text": "独有的手机参考内容"}
+    props = {"configurable": {"user_id": "local-user"}, "local_memory": {"memories": [reference]}}
+    collect_events(
+        test_client, "/agui/local/run", run_input("local-scope-thread", forwardedProps=props)
+    )
+    assert observed[0].context.memories[0].text == reference["text"]
+    snapshot = graph.checkpointer.get_tuple(
+        RunnableConfig(configurable={"thread_id": "local-scope-thread"})
+    )
+    assert reference["text"] not in str(snapshot)
+    collect_events(
+        test_client,
+        "/agui/local/run",
+        run_input("local-scope-thread", forwardedProps={"configurable": {"user_id": "local-user"}}),
+    )
+    assert observed[1] is None
+
+
+@pytest.mark.parametrize(
+    "enabled,context,status", [(False, {}, 503), (True, {"user_id": "other"}, 422)]
+)
+def test_agui_rejects_disabled_or_invalid_device_context(
+    mock_agui_agent, test_client, monkeypatch, enabled, context, status
+):
+    monkeypatch.setattr(settings, "LOCAL_MEMORY_ENABLED", enabled)
+    response = test_client.post(
+        "/agui/model-agent/run", json=run_input(forwardedProps={"local_memory": context})
+    )
+    assert response.status_code == status
+
+
 def test_agui_configurable_wrong_type(mock_agui_agent, test_client) -> None:
     body = run_input(forwardedProps={"configurable": "not-a-dict"})
     response = test_client.post("/agui/model-agent/run", json=body)

@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, StrictBool, TypeAdapter, mode
 from pydantic_core import PydanticCustomError
 
 from app.schemas.llm import AllModelEnum
+from app.schemas.local_memory import LocalMemoryContext
 
 PROTOCOL_VERSION = 1
 
@@ -48,6 +49,7 @@ class VoiceOption(BaseModel):
 class VoiceSessionInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     agent_id: str = Field(default="chatbot", min_length=1, max_length=100)
+    memory_mode: Literal["mem0", "local"] = "mem0"
     model: AllModelEnum | None = None
     thread_id: str | None = Field(default=None, min_length=1, max_length=128)
     user_id: str | None = Field(default=None, min_length=1, max_length=128)
@@ -95,6 +97,7 @@ class AudioQualitySummary(BaseModel):
 
 class VoiceSession(BaseModel):
     agent_id: str = "chatbot"
+    memory_mode: Literal["mem0", "local"] = "mem0"
     model: AllModelEnum | None = None
     voice: str
     language: Literal["zh", "en", "auto"] = "zh"
@@ -227,6 +230,12 @@ class MemoryConfirmationInput(Event):
     approved: StrictBool
 
 
+class LocalMemoryContextInput(Event):
+    type: Literal["memory.context"]
+    response_id: UUID
+    context: LocalMemoryContext
+
+
 class Ping(Event):
     type: Literal["ping"]
 
@@ -246,6 +255,7 @@ ClientEvent = Annotated[
     | PlaybackFinished
     | ApprovalInput
     | MemoryConfirmationInput
+    | LocalMemoryContextInput
     | Ping
     | CloseSession,
     Field(discriminator="type"),

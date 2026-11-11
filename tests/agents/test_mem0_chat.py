@@ -33,6 +33,70 @@ def config(user="alice", thread="thread-a"):
     return {"configurable": {"user_id": user, "thread_id": thread}}
 
 
+@pytest.mark.asyncio
+async def test_device_memory_is_ephemeral_untrusted_and_never_uses_mem0(agent_setup):
+    from uuid import uuid4
+
+    from app.schemas.local_memory import LocalMemoryContext
+    from app.services.memory.local_context import DeviceMemory, device_memory_scope
+
+    graph, memory, model = agent_setup
+    local = LocalMemoryContext.model_validate(
+        {
+            "revision": 7,
+            "memories": [
+                {
+                    "id": str(uuid4()),
+                    "category": "profile",
+                    "text": "独有的本机偏好，不构成邮件授权",
+                }
+            ],
+        }
+    )
+    with device_memory_scope(DeviceMemory("alice", "thread-a", local)):
+        await graph.ainvoke({"messages": [HumanMessage(content="你好")]}, config())
+    prompt = model.ainvoke.await_args.args[0]
+    reference = next(message for message in prompt if message.name == "retrieved_memories")
+    assert "独有的本机偏好" in reference.content
+    assert isinstance(reference, HumanMessage)
+    memory.search.assert_not_awaited()
+    memory.remember.assert_not_awaited()
+    checkpoint = await graph.checkpointer.aget_tuple(config())
+    assert "独有的本机偏好" not in str(checkpoint)
+    await graph.ainvoke({"messages": [HumanMessage(content="下一轮")]}, config())
+    memory.search.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_device_memory_scope_cannot_cross_users(agent_setup):
+    from app.schemas.local_memory import LocalMemoryContext
+    from app.services.memory.local_context import DeviceMemory, device_memory_scope
+
+    graph, memory, _ = agent_setup
+    with device_memory_scope(DeviceMemory("bob", "thread-a", LocalMemoryContext())):
+        with pytest.raises(ValueError, match="scope"):
+            await graph.ainvoke({"messages": [HumanMessage(content="你好")]}, config())
+    memory.search.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_device_forget_epoch_excludes_old_dialogue_on_later_turns(agent_setup):
+    from app.schemas.local_memory import LocalMemoryContext
+    from app.services.memory.local_context import DeviceMemory, device_memory_scope
+
+    graph, memory, model = agent_setup
+    for epoch, text in [(0, "需要遗忘的旧个人信息"), (1, "已经忘记，现在聊工作"), (1, "接着聊")]:
+        with device_memory_scope(
+            DeviceMemory("alice", "thread-a", LocalMemoryContext(epoch=epoch))
+        ):
+            await graph.ainvoke({"messages": [HumanMessage(content=text)]}, config())
+        if epoch == 1:
+            assert "需要遗忘的旧个人信息" not in str(model.ainvoke.await_args.args[0])
+    checkpoint = await graph.checkpointer.aget_tuple(config())
+    assert "需要遗忘的旧个人信息" in str(checkpoint)
+    memory.remember.assert_not_awaited()
+
+
 def test_mem0_agent_is_first_and_default():
     assert DEFAULT_AGENT == "mem0-chatbot"
     assert get_all_agent_info()[0].key == DEFAULT_AGENT

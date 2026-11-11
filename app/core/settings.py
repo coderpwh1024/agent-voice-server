@@ -278,6 +278,10 @@ class Settings(BaseSettings):
     MEM0_PROMPT_KEYS: Mem0PromptKeys = Field(default_factory=Mem0PromptKeys)
     MEM0_PROMPT_LABEL: str = Field(default="latest", min_length=1, pattern=r"\S")
 
+    LOCAL_MEMORY_ENABLED: bool = True
+    LOCAL_MEMORY_EXTRACTION_TIMEOUT_SECONDS: float = Field(default=20, ge=1, le=120)
+    LOCAL_MEMORY_CONTEXT_TIMEOUT_SECONDS: float = Field(default=3, ge=0.1, le=10)
+
     MEM0_ENABLED: bool = False
     MEM0_COLLECTION_NAME: str = Field(default="mem0_chat", pattern=r"^mem0_[a-z][a-z0-9_]{0,39}$")
     MEM0_LLM_MODEL: str = Field(default="qwen3.8-max", min_length=1)

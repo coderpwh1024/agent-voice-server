@@ -2,7 +2,7 @@
 
 import inspect
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from time import monotonic
@@ -19,6 +19,7 @@ from langchain_core.runnables import RunnableConfig
 
 from app.repositories.voice import VoiceRepository
 from app.schemas import ChatMessage
+from app.services.memory.local_context import device_memory_events
 from app.services.messages import (
     convert_message_content_to_string,
     langchain_to_chat_message,
@@ -95,6 +96,23 @@ async def graph_events(
     stream_tokens: bool = True,
     user_message: str = "",
 ) -> AsyncIterator[AgentEvent]:
+    arguments = dict(kwargs)
+    value = arguments.pop("_device_memory", None)
+    events = _graph_events(
+        agent, arguments, run_id, stream_tokens=stream_tokens, user_message=user_message
+    )
+    async for event in device_memory_events(events, value):
+        yield event
+
+
+async def _graph_events(
+    agent: Any,
+    kwargs: dict[str, Any],
+    run_id: str,
+    *,
+    stream_tokens: bool = True,
+    user_message: str = "",
+) -> AsyncGenerator[AgentEvent, None]:
     started = monotonic()
     first_text_sent = False
     async for stream_event in agent.astream(

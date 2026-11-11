@@ -2361,6 +2361,70 @@
           }
         }
       }
+    },
+    "/local-memories/extract": {
+      "post": {
+        "tags": [
+          "local-memories"
+        ],
+        "summary": "Extract Local Memories",
+        "operationId": "extract_local_memories",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "User Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LocalMemoryExtractionInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_LocalMemoryExtractionResult_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -4697,6 +4761,16 @@
             "title": "Stream Tokens",
             "description": "Whether to stream LLM tokens to the client.",
             "default": true
+          },
+          "local_memory": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LocalMemoryContext"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -5116,6 +5190,16 @@
             "examples": [
               {
                 "spicy_level": 0.8
+              }
+            ]
+          },
+          "local_memory": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LocalMemoryContext"
+              },
+              {
+                "type": "null"
               }
             ]
           }
@@ -5932,6 +6016,15 @@
             "const": 1,
             "title": "Protocol Version",
             "default": 1
+          },
+          "memory_mode": {
+            "type": "string",
+            "enum": [
+              "mem0",
+              "local"
+            ],
+            "title": "Memory Mode",
+            "default": "mem0"
           }
         },
         "type": "object",
@@ -6070,6 +6163,15 @@
             "minimum": 0.0,
             "title": "Pre Roll Samples",
             "default": 0
+          },
+          "memory_mode": {
+            "type": "string",
+            "enum": [
+              "mem0",
+              "local"
+            ],
+            "title": "Memory Mode",
+            "default": "mem0"
           }
         },
         "additionalProperties": false,
@@ -6322,6 +6424,240 @@
           "label"
         ],
         "title": "ExecutionStep"
+      },
+      "ApiResponse_LocalMemoryExtractionResult_": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LocalMemoryExtractionResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ApiResponse[LocalMemoryExtractionResult]"
+      },
+      "LocalMemoryContext": {
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Revision",
+            "default": 0
+          },
+          "epoch": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Epoch",
+            "default": 0
+          },
+          "total_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Total Count",
+            "default": 0
+          },
+          "memories": {
+            "items": {
+              "$ref": "#/components/schemas/LocalMemoryReference"
+            },
+            "type": "array",
+            "maxItems": 8,
+            "title": "Memories"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "LocalMemoryContext"
+      },
+      "LocalMemoryExtractionInput": {
+        "properties": {
+          "source_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Source Id"
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 6000,
+            "minLength": 1,
+            "title": "Text"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          },
+          "utc_offset_minutes": {
+            "type": "integer",
+            "maximum": 840.0,
+            "minimum": -840.0,
+            "title": "Utc Offset Minutes",
+            "default": 0
+          },
+          "context": {
+            "$ref": "#/components/schemas/LocalMemoryContext"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source_id",
+          "text"
+        ],
+        "title": "LocalMemoryExtractionInput"
+      },
+      "LocalMemoryExtractionResult": {
+        "properties": {
+          "proposals": {
+            "items": {
+              "$ref": "#/components/schemas/LocalMemoryProposal"
+            },
+            "type": "array",
+            "maxItems": 6,
+            "title": "Proposals"
+          },
+          "source_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Source Id"
+          },
+          "revision": {
+            "type": "integer",
+            "title": "Revision"
+          },
+          "epoch": {
+            "type": "integer",
+            "title": "Epoch"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "proposed",
+              "no_change"
+            ],
+            "title": "Status"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source_id",
+          "revision",
+          "epoch",
+          "status"
+        ],
+        "title": "LocalMemoryExtractionResult"
+      },
+      "LocalMemoryProposal": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "add",
+              "update",
+              "delete",
+              "clear"
+            ],
+            "title": "Action"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "profile",
+              "person",
+              "project",
+              "episode"
+            ],
+            "title": "Category"
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 1000,
+            "title": "Text",
+            "default": ""
+          },
+          "evidence": {
+            "type": "string",
+            "maxLength": 6000,
+            "minLength": 1,
+            "title": "Evidence"
+          },
+          "target_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Id"
+          },
+          "requires_confirmation": {
+            "type": "boolean",
+            "title": "Requires Confirmation",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "action",
+          "category",
+          "evidence"
+        ],
+        "title": "LocalMemoryProposal"
+      },
+      "LocalMemoryReference": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "profile",
+              "person",
+              "project",
+              "episode"
+            ],
+            "title": "Category"
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Text"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "category",
+          "text"
+        ],
+        "title": "LocalMemoryReference"
       }
     },
     "securitySchemes": {

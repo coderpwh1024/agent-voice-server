@@ -352,6 +352,70 @@ def configure(ws):
     return read_until(ws, "session.ready")[-1]
 
 
+def test_device_memory_roundtrip_is_bound_to_response_and_not_saved(voice_env):
+    from app.services.memory.local_context import device_memory
+
+    client, repo, agents, headers = voice_env
+
+    @entrypoint(checkpointer=MemorySaver())
+    async def local_agent(inputs, *, previous, config):
+        value = device_memory(
+            config["configurable"]["user_id"], config["configurable"]["thread_id"]
+        )
+        answer = AIMessage(content=f"已收到 {len(value.context.memories)} 条参考")
+        return entrypoint.final(
+            value={"messages": [answer]}, save={"messages": inputs["messages"] + [answer]}
+        )
+
+    agents["chatbot"] = local_agent
+    auth = headers()
+    session = create(client, auth, input_mode="text", memory_mode="local")
+    with connect(client, session, auth) as ws:
+        configure(ws)
+        event(ws, "input.text", text="按我的习惯回答")
+        events = read_until(ws, "memory.context.request")
+        request = events[-1]
+        assert request["text"] == "按我的习惯回答"
+        accepted = next(item for item in events if item["type"] == "input.accepted")
+        assert accepted["memory_eligible"] is True
+        assert accepted["turn_id"] == request["source_id"]
+        event(
+            ws,
+            "memory.context",
+            response_id=request["response_id"],
+            context={
+                "revision": 4,
+                "memories": [{"id": str(uuid4()), "category": "profile", "text": "本机独有参考"}],
+            },
+        )
+        done = read_until(ws, "response.done")
+        assert done[-1]["execution_status"] == "completed"
+        event(ws, "session.close")
+        read_until(ws, "session.closed")
+    history = client.post(
+        "/chatbot/history", headers=auth, json={"thread_id": session["thread_id"]}
+    ).json()
+    assert "已收到 1 条参考" in str(history)
+    assert "本机独有参考" not in str(history)
+
+
+def test_device_memory_timeout_finishes_without_server_memory_fallback(voice_env, monkeypatch):
+    client, repo, agents, headers = voice_env
+    monkeypatch.setattr(settings, "LOCAL_MEMORY_CONTEXT_TIMEOUT_SECONDS", 0.1)
+    auth = headers()
+    session = create(client, auth, input_mode="text", memory_mode="local")
+    with connect(client, session, auth) as ws:
+        configure(ws)
+        event(ws, "input.text", text="你好")
+        events = read_until(ws, "response.done")
+        assert any(item["type"] == "memory.context.unavailable" for item in events)
+        assert events[-1]["execution_status"] == "completed"
+        event(ws, "memory.context", response_id=events[-1]["response_id"], context={})
+        assert read_until(ws, "error")[-1]["code"] == "stale_memory_context"
+        event(ws, "session.close")
+        read_until(ws, "session.closed")
+
+
 def test_text_mode_skips_asr_and_keeps_agent_tts_and_history(voice_env, monkeypatch):
     import app.api.voice as voice_routes
 

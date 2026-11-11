@@ -8,6 +8,7 @@ from app.api import (
     email_skill,
     files,
     health,
+    local_memories,
     memories,
     users,
     video,
@@ -40,6 +41,9 @@ protected.include_router(agui.router)
 
 
 protected.include_router(memories.router)
+
+
+protected.include_router(local_memories.router)
 
 
 protected.include_router(email_skill.router)

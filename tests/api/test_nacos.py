@@ -19,6 +19,23 @@ def test_file_upload_settings_map_from_nacos() -> None:
     assert config.FILE_UPLOAD_MAX_BYTES == 1048576
 
 
+def test_device_memory_settings_map_independently_of_mem0() -> None:
+    config = nacos.Settings(_env_file=None, USE_FAKE_MODEL=True)
+    nacos.apply_remote_settings(
+        config,
+        """memory:
+  local:
+    enabled: false
+    extraction_timeout_seconds: 12
+    context_timeout_seconds: 2
+""",
+    )
+    assert config.LOCAL_MEMORY_ENABLED is False
+    assert config.LOCAL_MEMORY_EXTRACTION_TIMEOUT_SECONDS == 12
+    assert config.LOCAL_MEMORY_CONTEXT_TIMEOUT_SECONDS == 2
+    assert config.MEM0_ENABLED is False
+
+
 @pytest.fixture(autouse=True)
 def ai_client(monkeypatch, mem0_prompts):
     client = AsyncMock()

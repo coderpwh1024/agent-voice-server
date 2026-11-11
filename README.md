@@ -15,6 +15,8 @@ cd agent-voice-server
 
 项目只运行一个 Mem0 主 Agent，内部实现为 `mem0_chat`，现有对外标识 `mem0-chatbot` 保持不变。它负责日常对话、用户长期记忆、邮件 Skill 和视频 Skill；研究、RAG、Supervisor、GitHub MCP 及 `chatbot` 的独立实现和注册均已移除。旧 `chatbot` 请求值只在 API 边界解析到主 Agent，已有 App 无需修改 URL 或参数。
 
+兼容新版 Flutter App 的首选记忆方案为手机端 `MEMORY.md`：App 按需提供相关片段，服务端只返回候选，由手机检查版本并写回。原 Mem0 代码、管理接口和旧客户端行为保留为备选。存储位置、开关、协议、遗忘与隐私边界见[手机端 Markdown 记忆](docs/local-memory.md)。
+
 ## 请求与语音链路
 
 ```mermaid

@@ -56,6 +56,12 @@ async def capabilities(request: Request) -> ApiResponse[dict[str, Any]]:
             "enabled": settings.VOICE_ENABLED,
             "default_agent": DEFAULT_AGENT,
             "protocol_version": 1,
+            "local_memory": {
+                "enabled": settings.LOCAL_MEMORY_ENABLED,
+                "version": 1,
+                "max_context_chars": 3000,
+                "max_references": 8,
+            },
             "input_format": "pcm16_16000_mono",
             "output_format": "pcm16_24000_mono",
             "audio_header_bytes": 45,
@@ -107,6 +113,8 @@ async def create_session(body: VoiceSessionInput, request: Request) -> ApiRespon
     identity = principal(request)
     repo = require_voice(request)
     user_id = bind_user(identity, body.user_id)
+    if body.memory_mode == "local" and not settings.LOCAL_MEMORY_ENABLED:
+        raise HTTPException(503, "Device memory is disabled")
     try:
         agent = get_agent(body.agent_id)
     except (HTTPException, KeyError) as exc:

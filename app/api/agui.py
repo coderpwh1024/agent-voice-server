@@ -19,13 +19,16 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from langchain_core.runnables import RunnableConfig
 from langfuse.langchain import CallbackHandler
+from pydantic import ValidationError
 
 from app.agents import DEFAULT_AGENT, AgentGraph
 from app.api.dependencies import get_agent, repository
 from app.core import settings
 from app.repositories.voice import VoiceRepository
+from app.schemas.local_memory import LocalMemoryContext
 from app.services.agent_runner import thread_guard
 from app.services.auth import authorize_thread, bind_user
+from app.services.memory.local_context import DeviceMemory, device_memory_events
 from app.services.messages import ensure_model_available
 
 logger = logging.getLogger(__name__)
@@ -41,6 +44,8 @@ RESERVED_CONFIGURABLE_KEYS = {
     "authenticated_user_id",
     "execution_run_id",
     "execution_response_id",
+    "local_memory",
+    "memory_mode",
 }
 
 
@@ -87,6 +92,25 @@ async def _event_stream(
     config: RunnableConfig,
     encoder: EventEncoder,
     repo: VoiceRepository | None = None,
+    local_memory: LocalMemoryContext | None = None,
+) -> AsyncGenerator[str, None]:
+    value = (
+        DeviceMemory(config["configurable"]["user_id"], input_data.thread_id, local_memory)
+        if local_memory is not None
+        else None
+    )
+    events = _scoped_event_stream(agent_id, graph, input_data, config, encoder, repo)
+    async for event in device_memory_events(events, value):
+        yield event
+
+
+async def _scoped_event_stream(
+    agent_id: str,
+    graph: AgentGraph,
+    input_data: RunAgentInput,
+    config: RunnableConfig,
+    encoder: EventEncoder,
+    repo: VoiceRepository | None,
 ) -> AsyncGenerator[str, None]:
     async with thread_guard(repo, input_data.thread_id):
         agent = LangGraphAgent(name=agent_id, graph=graph, config=config)  # type: ignore[arg-type]
@@ -114,6 +138,14 @@ async def agui_run(
         raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
 
     props = dict(input_data.forwarded_props or {})
+    local_memory = None
+    if props.get("local_memory") is not None:
+        if not settings.LOCAL_MEMORY_ENABLED:
+            raise HTTPException(503, "Device memory is disabled")
+        try:
+            local_memory = LocalMemoryContext.model_validate(props.pop("local_memory"))
+        except ValidationError:
+            raise HTTPException(422, "Invalid device memory context") from None
     configurable = props.get("configurable") or {}
     if not isinstance(configurable, dict):
         raise HTTPException(422, "configurable must be an object")
@@ -139,6 +171,6 @@ async def agui_run(
     config["configurable"]["authenticated_user_id"] = request.state.principal.user_id
     encoder = EventEncoder(accept=request.headers.get("accept", ""))
     return StreamingResponse(
-        _event_stream(agent_id, graph, input_data, config, encoder, repo),
+        _event_stream(agent_id, graph, input_data, config, encoder, repo, local_memory),
         media_type=encoder.get_content_type(),
     )

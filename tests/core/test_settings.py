@@ -39,6 +39,19 @@ def test_check_str_is_http():
         check_str_is_http("ftp://invalid.com")
 
 
+def test_local_memory_defaults_and_timeout_bounds():
+    settings = Settings(_env_file=None)
+    assert settings.LOCAL_MEMORY_ENABLED is True
+    assert settings.LOCAL_MEMORY_CONTEXT_TIMEOUT_SECONDS == 3
+    assert settings.LOCAL_MEMORY_EXTRACTION_TIMEOUT_SECONDS == 20
+    for fields in [
+        {"LOCAL_MEMORY_CONTEXT_TIMEOUT_SECONDS": 0},
+        {"LOCAL_MEMORY_EXTRACTION_TIMEOUT_SECONDS": 0},
+    ]:
+        with pytest.raises(ValidationError):
+            Settings(_env_file=None, **fields)
+
+
 def test_settings_default_values():
     settings = Settings(_env_file=None)
     assert settings.HOST == "0.0.0.0"

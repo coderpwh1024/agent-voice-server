@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field, SerializeAsAny
 from typing_extensions import TypedDict
 
 from app.schemas.llm import AlibabaModelName, AllModelEnum, AnthropicModelName
+from app.schemas.local_memory import LocalMemoryContext
 
 
 class AgentInfo(BaseModel):
@@ -40,6 +41,8 @@ class ServiceMetadata(BaseModel):
 
 class UserInput(BaseModel):
     """Basic user input for the agent."""
+
+    local_memory: LocalMemoryContext | None = None
 
     message: str = Field(
         description="User input to the agent.",

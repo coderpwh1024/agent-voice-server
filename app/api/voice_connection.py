@@ -20,6 +20,7 @@ from app.core.agent_ids import uses_streaming_chat
 from app.core.settings import Settings
 from app.repositories.voice import VoiceRepository
 from app.schemas import StreamInput
+from app.schemas.local_memory import LocalMemoryContext
 from app.schemas.voice import (
     ZERO_UUID,
     ApprovalInput,
@@ -29,6 +30,7 @@ from app.schemas.voice import (
     CloseSession,
     CommitInput,
     Configure,
+    LocalMemoryContextInput,
     MemoryConfirmationInput,
     Ping,
     PlaybackFinished,
@@ -109,6 +111,7 @@ class VoiceConnection:
         self.wake_prefix_pending = ""
         self.wake_greeting_response_id: str | None = None
         self.wake_confirmation_started = self.started
+        self.memory_requests: dict[str, asyncio.Future[LocalMemoryContext]] = {}
 
     def remember(self, event_id: str) -> bool:
         if event_id in self.seen:
@@ -275,12 +278,18 @@ class VoiceConnection:
             (turn, {"memory_confirmation": confirmation} if confirmation else resume)
         )
         self.activity = time.monotonic()
+        memory_fields: dict[str, Any] = (
+            {"text": turn.input_text, "memory_eligible": resume is None and confirmation is None}
+            if self.session.memory_mode == "local"
+            else {}
+        )
         await self.emit(
             "input.accepted",
             input_id=input_id,
             turn_id=turn.turn_id,
             response_id=turn.response_id,
             duplicate=False,
+            **memory_fields,
         )
 
     async def restore_approvals(self) -> None:
@@ -333,6 +342,12 @@ class VoiceConnection:
                 await self.emit("event.ack", client_event_id=event.event_id, duplicate=True)
                 continue
             match event:
+                case LocalMemoryContextInput():
+                    pending = self.memory_requests.get(str(event.response_id))
+                    if pending is None or pending.done():
+                        await self.emit("error", code="stale_memory_context", recoverable=True)
+                    else:
+                        pending.set_result(event.context)
                 case TextInput():
                     await self.submit(event.text, event.event_id)
                 case CommitInput():
@@ -639,6 +654,11 @@ class VoiceConnection:
                     model=self.session.model,
                     thread_id=self.session.thread_id,
                     user_id=self.session.user_id,
+                    local_memory=(
+                        await self.request_memory_context(turn)
+                        if self.session.memory_mode == "local"
+                        else None
+                    ),
                 )
                 kwargs, run_id = await build_run_input(
                     data,
@@ -751,6 +771,36 @@ class VoiceConnection:
             )
         finally:
             await self.repo.save_turn(turn)
+
+    async def request_memory_context(self, turn: VoiceTurn) -> LocalMemoryContext:
+        started = time.monotonic()
+        future: asyncio.Future[LocalMemoryContext] = asyncio.get_running_loop().create_future()
+        self.memory_requests[turn.response_id] = future
+        await self.emit(
+            "memory.context.request",
+            response_id=turn.response_id,
+            source_id=turn.turn_id,
+            thread_id=turn.thread_id,
+            text=turn.input_text,
+        )
+        try:
+            async with asyncio.timeout(self.settings.LOCAL_MEMORY_CONTEXT_TIMEOUT_SECONDS):
+                context = await future
+            logger.info(
+                "Local memory context received response_id=%s revision=%d epoch=%d references=%d duration_ms=%d",
+                turn.response_id,
+                context.revision,
+                context.epoch,
+                len(context.memories),
+                int((time.monotonic() - started) * 1000),
+            )
+            return context
+        except TimeoutError:
+            logger.warning("Local memory context timed out response_id=%s", turn.response_id)
+            await self.emit("memory.context.unavailable", response_id=turn.response_id)
+            return LocalMemoryContext()
+        finally:
+            self.memory_requests.pop(turn.response_id, None)
 
     async def execute(self, turn: VoiceTurn, resume: dict | None) -> None:
         self.current = turn

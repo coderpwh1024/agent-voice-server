@@ -389,6 +389,104 @@
       ],
       "title": "MemoryConfirmationInput",
       "type": "object"
+    },
+    "LocalMemoryContext": {
+      "additionalProperties": false,
+      "properties": {
+        "revision": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "epoch": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Epoch",
+          "type": "integer"
+        },
+        "total_count": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Total Count",
+          "type": "integer"
+        },
+        "memories": {
+          "items": {
+            "$ref": "#/$defs/LocalMemoryReference"
+          },
+          "maxItems": 8,
+          "title": "Memories",
+          "type": "array"
+        }
+      },
+      "title": "LocalMemoryContext",
+      "type": "object"
+    },
+    "LocalMemoryContextInput": {
+      "additionalProperties": false,
+      "properties": {
+        "event_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Event Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "memory.context",
+          "title": "Type",
+          "type": "string"
+        },
+        "response_id": {
+          "format": "uuid",
+          "title": "Response Id",
+          "type": "string"
+        },
+        "context": {
+          "$ref": "#/$defs/LocalMemoryContext"
+        }
+      },
+      "required": [
+        "event_id",
+        "type",
+        "response_id",
+        "context"
+      ],
+      "title": "LocalMemoryContextInput",
+      "type": "object"
+    },
+    "LocalMemoryReference": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "category": {
+          "enum": [
+            "profile",
+            "person",
+            "project",
+            "episode"
+          ],
+          "title": "Category",
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "category",
+        "text"
+      ],
+      "title": "LocalMemoryReference",
+      "type": "object"
     }
   },
   "discriminator": {
@@ -404,7 +502,8 @@
       "response.cancel": "#/$defs/CancelResponse",
       "session.close": "#/$defs/CloseSession",
       "session.configure": "#/$defs/Configure",
-      "memory.confirm": "#/$defs/MemoryConfirmationInput"
+      "memory.confirm": "#/$defs/MemoryConfirmationInput",
+      "memory.context": "#/$defs/LocalMemoryContextInput"
     },
     "propertyName": "type"
   },
@@ -438,6 +537,9 @@
     },
     {
       "$ref": "#/$defs/MemoryConfirmationInput"
+    },
+    {
+      "$ref": "#/$defs/LocalMemoryContextInput"
     },
     {
       "$ref": "#/$defs/Ping"
