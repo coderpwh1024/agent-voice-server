@@ -113,6 +113,7 @@ _NESTED_SETTINGS: dict[str, Any] = {
         "dashscope": {
             "api_key": "DASHSCOPE_API_KEY",
             "base_url": "DASHSCOPE_BASE_URL",
+            "enable_search": "DASHSCOPE_ENABLE_SEARCH",
             "embedding_model": "DASHSCOPE_EMBEDDING_MODEL",
             "explicit_cache_enabled": "DASHSCOPE_EXPLICIT_CACHE_ENABLED",
         },

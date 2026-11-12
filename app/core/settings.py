@@ -210,6 +210,7 @@ class Settings(BaseSettings):
 
     DASHSCOPE_API_KEY: SecretStr | None = None
     DASHSCOPE_BASE_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    DASHSCOPE_ENABLE_SEARCH: bool = True
     DASHSCOPE_EXPLICIT_CACHE_ENABLED: bool = False
     CHAT_LLM_ENABLE_THINKING: bool = False
     DASHSCOPE_EMBEDDING_MODEL: str = "qwen3.7-text-embedding"

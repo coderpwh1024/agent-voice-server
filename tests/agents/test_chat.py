@@ -1,9 +1,12 @@
 import asyncio
+import json
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, Mock
 
+import httpx
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_openai import ChatOpenAI
 
 from app.agents.chat import answer_chat
 from app.core import settings
@@ -16,6 +19,69 @@ def chat_model(response):
     model = Mock(ainvoke=AsyncMock(return_value=response))
     model.bind_tools.return_value = model
     return model
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("model_name", "enabled", "video_enabled", "expected_search"),
+    [
+        ("qwen3.8-max", True, False, True),
+        ("qwen3.8-max", True, True, True),
+        ("qwen3.8-max", False, False, False),
+        ("gpt-5-nano", True, False, False),
+    ],
+)
+async def test_bailian_search_is_scoped_to_main_answer(
+    monkeypatch, model_name, enabled, video_enabled, expected_search
+):
+    monkeypatch.setattr(settings, "DASHSCOPE_ENABLE_SEARCH", enabled)
+    monkeypatch.setattr(settings, "VIDEO_SKILL_ENABLED", video_enabled)
+    requests = []
+
+    async def respond(request):
+        requests.append(json.loads(request.content))
+        return httpx.Response(
+            200,
+            json={
+                "id": "chatcmpl-test",
+                "object": "chat.completion",
+                "created": 1,
+                "model": model_name,
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": "回答"},
+                        "finish_reason": "stop",
+                    }
+                ],
+            },
+        )
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(respond))
+    model = ChatOpenAI(
+        model=model_name,
+        api_key="test-key",
+        base_url="https://example.com/compatible-mode/v1",
+        extra_body={"enable_thinking": False},
+        http_async_client=client,
+    )
+    human = HumanMessage(content="查最新消息")
+    video = VideoSkillSession(human, None, []) if video_enabled else None
+    config = {"configurable": {"user_id": "7", "thread_id": "chat", "model": model_name}}
+    async with client:
+        reply = await answer_chat(model, [human], config, video=video)
+
+    assert reply.content == "回答"
+    assert len(requests) == 1
+    request = requests[0]
+    assert request["enable_thinking"] is False
+    assert request.get("enable_search") is (True if expected_search else None)
+    assert ("tools" in request) is video_enabled
+    assert model.extra_body == {"enable_thinking": False}
+    rules = "\n".join(
+        message["content"] for message in request["messages"] if message["role"] == "system"
+    )
+    assert ("可以使用百炼内置联网搜索" in rules) is expected_search
 
 
 @pytest.mark.asyncio

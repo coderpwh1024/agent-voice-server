@@ -826,6 +826,16 @@ def test_explicit_cache_setting_maps_from_nacos_and_defaults_off():
     assert config.DASHSCOPE_EXPLICIT_CACHE_ENABLED is True
 
 
+def test_bailian_search_defaults_on_and_maps_from_nacos():
+    config = make_settings()
+    assert config.DASHSCOPE_ENABLE_SEARCH is True
+    updated = nacos.apply_remote_settings(
+        config, "models:\n  dashscope:\n    enable_search: false\n"
+    )
+    assert updated == ["DASHSCOPE_ENABLE_SEARCH"]
+    assert config.DASHSCOPE_ENABLE_SEARCH is False
+
+
 def test_http_chat_thinking_default_maps_from_nacos():
     config = make_settings()
     assert config.CHAT_LLM_ENABLE_THINKING is False

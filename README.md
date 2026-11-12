@@ -28,6 +28,7 @@ flowchart TD
     ASR --> Main[mem0-chatbot]
     HTTP --> Main
     Main --> Memory[Mem0 用户记忆]
+    Main --> Search[百炼内置联网搜索]
     Main --> Email[当前用户邮件 Skill]
     Main --> Video[视频 Skill / 视频服务]
     Main --> Text[根回答流式事件]
@@ -44,7 +45,7 @@ flowchart TD
 1. 校验用户身份与线程归属，恢复历史和待处理业务状态。
 2. 优先处理邮件请求与记忆管理指令。
 3. 召回当前用户的长期事实，将其作为不可信参考传给主模型。
-4. 主模型直接回答，或按需加载视频 Skill 后执行一次受控操作。
+4. 主模型直接回答，按需使用百炼内置联网搜索，或加载视频 Skill 后执行一次受控操作。
 5. 根回答流式发送到 UI；实时语音同时断句、合成 PCM 并下发播放。
 6. 普通聊天等待 Mem0 提取本轮用户事实后完成。邮件和视频分支保留原有提前返回与业务状态。
 
@@ -112,7 +113,7 @@ streamlit_app.py         开发聊天界面
 
 `/info` 与 `/voice/capabilities` 只列出 `mem0-chatbot`。语音创建请求的 `agent_id` 默认仍为 `chatbot`，由后端映射到同一主 Agent。继续已有线程时应继续使用该线程原来的标识，后端不改写其所有权或检查点 metadata。
 
-其他 Agent 标识返回 404。旧数据库、历史记录与记忆不在本次收敛中删除或迁移。旧 Nacos 的研究、RAG、MCP 配置字段仍接受加载，但不能恢复已移除的能力；主 Agent 不再提供联网检索。Streamlit 和事件层保留旧历史消息的兼容展示与协议解析。
+其他 Agent 标识返回 404。旧数据库、历史记录与记忆不在本次收敛中删除或迁移。旧 Nacos 的研究、RAG、MCP 配置字段仍接受加载，但不能恢复已移除的独立研究能力。主 Agent 使用百炼模型时，普通回答默认开启百炼内置联网搜索；可通过 Nacos 的 `models.dashscope.enable_search` 或环境变量 `DASHSCOPE_ENABLE_SEARCH` 关闭。搜索按模型请求决定是否实际触发，不能把开关开启等同于已完成联网核实。Streamlit 和事件层保留旧历史消息的兼容展示与协议解析。
 
 ## 执行过程与恢复
 
