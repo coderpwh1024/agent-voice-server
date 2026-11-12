@@ -11,6 +11,7 @@ from pydantic_core import PydanticCustomError
 
 from app.schemas.llm import AllModelEnum
 from app.schemas.local_memory import LocalMemoryContext
+from app.schemas.location import DeviceLocation
 
 PROTOCOL_VERSION = 1
 
@@ -180,6 +181,20 @@ class Configure(Event):
 class TextInput(Event):
     type: Literal["input.text"]
     text: str = Field(min_length=1, max_length=6000)
+    device_location: DeviceLocation | None = None
+
+
+class LocationResult(Event):
+    type: Literal["location.result"]
+    request_id: str = Field(min_length=1, max_length=128)
+    status: Literal["ok", "denied", "unavailable"]
+    device_location: DeviceLocation | None = None
+
+    @model_validator(mode="after")
+    def require_location_only_on_success(self) -> "LocationResult":
+        if (self.status == "ok") != (self.device_location is not None):
+            raise ValueError("Location is required only for successful results")
+        return self
 
 
 class CommitInput(Event):
@@ -247,6 +262,7 @@ class CloseSession(Event):
 ClientEvent = Annotated[
     Configure
     | TextInput
+    | LocationResult
     | CommitInput
     | CancelResponse
     | SpeechHint

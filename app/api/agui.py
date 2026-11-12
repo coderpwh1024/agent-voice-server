@@ -26,8 +26,10 @@ from app.api.dependencies import get_agent, repository
 from app.core import settings
 from app.repositories.voice import VoiceRepository
 from app.schemas.local_memory import LocalMemoryContext
+from app.schemas.location import DeviceLocation
 from app.services.agent_runner import thread_guard
 from app.services.auth import authorize_thread, bind_user
+from app.services.location import device_location_events, needs_device_location
 from app.services.memory.local_context import DeviceMemory, device_memory_events
 from app.services.messages import ensure_model_available
 
@@ -45,6 +47,7 @@ RESERVED_CONFIGURABLE_KEYS = {
     "execution_run_id",
     "execution_response_id",
     "local_memory",
+    "device_location",
     "memory_mode",
 }
 
@@ -93,6 +96,7 @@ async def _event_stream(
     encoder: EventEncoder,
     repo: VoiceRepository | None = None,
     local_memory: LocalMemoryContext | None = None,
+    location: DeviceLocation | None = None,
 ) -> AsyncGenerator[str, None]:
     value = (
         DeviceMemory(config["configurable"]["user_id"], input_data.thread_id, local_memory)
@@ -100,7 +104,7 @@ async def _event_stream(
         else None
     )
     events = _scoped_event_stream(agent_id, graph, input_data, config, encoder, repo)
-    async for event in device_memory_events(events, value):
+    async for event in device_location_events(device_memory_events(events, value), location):
         yield event
 
 
@@ -139,6 +143,7 @@ async def agui_run(
 
     props = dict(input_data.forwarded_props or {})
     local_memory = None
+    location = None
     if props.get("local_memory") is not None:
         if not settings.LOCAL_MEMORY_ENABLED:
             raise HTTPException(503, "Device memory is disabled")
@@ -146,6 +151,19 @@ async def agui_run(
             local_memory = LocalMemoryContext.model_validate(props.pop("local_memory"))
         except ValidationError:
             raise HTTPException(422, "Invalid device memory context") from None
+    if props.get("device_location") is not None:
+        try:
+            location = DeviceLocation.model_validate(props.pop("device_location"))
+        except ValidationError:
+            raise HTTPException(422, "Invalid device location") from None
+    latest_message = input_data.messages[-1] if input_data.messages else None
+    latest_content = getattr(latest_message, "content", None)
+    if (
+        not isinstance(latest_content, str)
+        or not needs_device_location(latest_content)
+        or (location is not None and not location.is_fresh())
+    ):
+        location = None
     configurable = props.get("configurable") or {}
     if not isinstance(configurable, dict):
         raise HTTPException(422, "configurable must be an object")
@@ -171,6 +189,6 @@ async def agui_run(
     config["configurable"]["authenticated_user_id"] = request.state.principal.user_id
     encoder = EventEncoder(accept=request.headers.get("accept", ""))
     return StreamingResponse(
-        _event_stream(agent_id, graph, input_data, config, encoder, repo, local_memory),
+        _event_stream(agent_id, graph, input_data, config, encoder, repo, local_memory, location),
         media_type=encoder.get_content_type(),
     )

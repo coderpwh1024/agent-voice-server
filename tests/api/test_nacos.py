@@ -36,6 +36,12 @@ def test_device_memory_settings_map_independently_of_mem0() -> None:
     assert config.MEM0_ENABLED is False
 
 
+def test_voice_location_timeout_is_loaded_from_nacos() -> None:
+    config = nacos.Settings(_env_file=None, USE_FAKE_MODEL=True)
+    nacos.apply_remote_settings(config, "voice:\n  session:\n    location_timeout_seconds: 40\n")
+    assert config.VOICE_LOCATION_TIMEOUT_SECONDS == 40
+
+
 @pytest.fixture(autouse=True)
 def ai_client(monkeypatch, mem0_prompts):
     client = AsyncMock()
@@ -834,6 +840,39 @@ def test_bailian_search_defaults_on_and_maps_from_nacos():
     )
     assert updated == ["DASHSCOPE_ENABLE_SEARCH"]
     assert config.DASHSCOPE_ENABLE_SEARCH is False
+
+
+def test_amap_mcp_loads_from_nacos_and_requires_bailian_key():
+    config = make_settings(NACOS_ENABLED=True, DASHSCOPE_API_KEY=SecretStr("test-key"))
+    url = "https://llm-example.cn-beijing.maas.aliyuncs.com/api/v1/mcps/amap-maps/mcp"
+    updated = nacos.apply_remote_settings(
+        config,
+        f"mcp:\n  amap_maps:\n    enabled: true\n    url: {url}\n    timeout_seconds: 12\n",
+    )
+    assert updated == ["AMAP_MCP_ENABLED", "AMAP_MCP_TIMEOUT_SECONDS", "AMAP_MCP_URL"]
+    assert config.AMAP_MCP_ENABLED is True
+    assert config.AMAP_MCP_URL == url
+    assert config.AMAP_MCP_TIMEOUT_SECONDS == 12
+
+    for invalid_url in (
+        "http://llm-example.cn-beijing.maas.aliyuncs.com/api/v1/mcps/amap-maps/mcp",
+        "https://example.com/api/v1/mcps/amap-maps/mcp",
+        f"{url}?token=secret",
+    ):
+        with pytest.raises(ValueError, match="AMAP_MCP_URL"):
+            nacos.apply_remote_settings(config, f"mcp:\n  amap_maps:\n    url: {invalid_url}\n")
+
+    with pytest.raises(ValueError, match="DASHSCOPE_API_KEY"):
+        nacos.apply_remote_settings(
+            make_settings(NACOS_ENABLED=True, DASHSCOPE_API_KEY=None),
+            f"mcp:\n  amap_maps:\n    enabled: true\n    url: {url}\n",
+        )
+
+    with pytest.raises(ValueError, match="through Nacos"):
+        nacos.apply_remote_settings(
+            make_settings(DASHSCOPE_API_KEY=SecretStr("test-key")),
+            f"mcp:\n  amap_maps:\n    enabled: true\n    url: {url}\n",
+        )
 
 
 def test_http_chat_thinking_default_maps_from_nacos():

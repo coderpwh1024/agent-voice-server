@@ -25,6 +25,7 @@ from starlette.websockets import WebSocketDisconnect
 from app.core import settings
 from app.main import app
 from app.schemas.voice import ZERO_UUID, VoiceOption, VoiceTurn, decode_audio, encode_audio
+from app.services.location import device_location
 from app.services.voice.providers.errors import SpeechProviderError
 
 
@@ -232,6 +233,95 @@ def build_chatbot(responses=None, sleep=0):
         )
 
     return chatbot
+
+
+def location_chatbot(captured):
+    @entrypoint(checkpointer=MemorySaver())
+    async def chatbot(inputs, *, previous, config):
+        captured.append(device_location())
+        response = AIMessage(content="收到位置")
+        messages = (previous or {}).get("messages", []) + inputs["messages"]
+        return entrypoint.final(
+            value={"messages": [response]}, save={"messages": messages + [response]}
+        )
+
+    return chatbot
+
+
+def test_text_device_location_is_one_turn_only(voice_env):
+    client, repo, agents, headers = voice_env
+    captured = []
+    agents["chatbot"] = location_chatbot(captured)
+    auth = headers()
+    session = create(client, auth, input_mode="text")
+    fix = {
+        "latitude": 39.9,
+        "longitude": 116.4,
+        "accuracy_meters": 20,
+        "captured_at": datetime.now(UTC).isoformat(),
+    }
+    with connect(client, session, auth) as ws:
+        configure(ws)
+        event(ws, "input.text", text="我现在在哪？", device_location=fix)
+        read_until(ws, "response.done")
+        event(ws, "input.text", text="你好")
+        read_until(ws, "response.done")
+        event(ws, "session.close")
+        read_until(ws, "session.closed")
+    assert captured[0].longitude == 116.4
+    assert captured[1] is None
+    assert all("116.4" not in str(turn.model_dump()) for turn in repo.records.values())
+
+
+@pytest.mark.parametrize("status", ["ok", "denied", "timeout"])
+def test_asr_requests_location_and_accepts_result(voice_env, monkeypatch, status):
+    import app.api.voice as voice_routes
+
+    class LocationSpeech(FakeSpeech):
+        async def append_audio(self, ws, pcm):
+            await self.events.put(
+                {
+                    "type": "conversation.item.input_audio_transcription.completed",
+                    "item_id": "location-speech",
+                    "transcript": "我现在在哪？",
+                }
+            )
+
+    monkeypatch.setattr(voice_routes, "AlibabaRealtime", LocationSpeech)
+    client, _repo, agents, headers = voice_env
+    captured = []
+    agents["chatbot"] = location_chatbot(captured)
+    if status == "timeout":
+        monkeypatch.setattr(settings, "VOICE_LOCATION_TIMEOUT_SECONDS", 0.05)
+    auth = headers()
+    session = create(client, auth)
+    with connect(client, session, auth) as ws:
+        ready = configure(ws)
+        ws.send_bytes(
+            encode_audio(b"\0\0" * 320, ready["connection_id"], str(ZERO_UUID), 0, 0, kind=1)
+        )
+        request = read_until(ws, "location.request")[-1]
+        payload = (
+            {
+                "device_location": {
+                    "latitude": 39.9,
+                    "longitude": 116.4,
+                    "accuracy_meters": 20,
+                    "captured_at": datetime.now(UTC).isoformat(),
+                }
+            }
+            if status == "ok"
+            else {}
+        )
+        if status != "timeout":
+            event(ws, "location.result", request_id=request["request_id"], status=status, **payload)
+        assert read_until(ws, "response.done")[-1]["execution_status"] == "completed"
+        event(ws, "session.close")
+        read_until(ws, "session.closed")
+    if status == "ok":
+        assert captured[0].longitude == 116.4
+    else:
+        assert captured == [None]
 
 
 @pytest.fixture

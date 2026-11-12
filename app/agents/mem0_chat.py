@@ -260,7 +260,9 @@ async def _mem0_chat(
     await progress("chat.answer", "生成回复", "succeeded")
     if video is not None:
         video_dialogue = video.saved
-    if response.response_metadata.get("video_status"):
+    if response.response_metadata.get("video_status") or response.response_metadata.get(
+        "map_status"
+    ):
         return entrypoint.final(
             value={"messages": [response]},
             save={

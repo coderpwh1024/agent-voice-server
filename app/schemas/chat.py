@@ -6,6 +6,7 @@ from typing_extensions import TypedDict
 
 from app.schemas.llm import AlibabaModelName, AllModelEnum, AnthropicModelName
 from app.schemas.local_memory import LocalMemoryContext
+from app.schemas.location import DeviceLocation
 
 
 class AgentInfo(BaseModel):
@@ -43,6 +44,7 @@ class UserInput(BaseModel):
     """Basic user input for the agent."""
 
     local_memory: LocalMemoryContext | None = None
+    device_location: DeviceLocation | None = None
 
     message: str = Field(
         description="User input to the agent.",

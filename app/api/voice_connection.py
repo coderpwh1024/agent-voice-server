@@ -21,6 +21,7 @@ from app.core.settings import Settings
 from app.repositories.voice import VoiceRepository
 from app.schemas import StreamInput
 from app.schemas.local_memory import LocalMemoryContext
+from app.schemas.location import DeviceLocation
 from app.schemas.voice import (
     ZERO_UUID,
     ApprovalInput,
@@ -31,6 +32,7 @@ from app.schemas.voice import (
     CommitInput,
     Configure,
     LocalMemoryContextInput,
+    LocationResult,
     MemoryConfirmationInput,
     Ping,
     PlaybackFinished,
@@ -44,6 +46,7 @@ from app.schemas.voice import (
     encode_audio,
 )
 from app.services.agent_runner import graph_events, thread_guard
+from app.services.location import needs_device_location
 from app.services.messages import messages_from_checkpoint
 from app.services.voice.providers.alibaba_realtime import AlibabaRealtime
 from app.services.voice.providers.errors import SpeechProviderError
@@ -112,6 +115,8 @@ class VoiceConnection:
         self.wake_greeting_response_id: str | None = None
         self.wake_confirmation_started = self.started
         self.memory_requests: dict[str, asyncio.Future[LocalMemoryContext]] = {}
+        self.location_requests: dict[str, asyncio.Future[DeviceLocation | None]] = {}
+        self.turn_locations: dict[str, DeviceLocation] = {}
 
     def remember(self, event_id: str) -> bool:
         if event_id in self.seen:
@@ -244,6 +249,8 @@ class VoiceConnection:
         *,
         confirmation: dict | None = None,
         wake_greeting: bool = False,
+        device_location: DeviceLocation | None = None,
+        request_location: bool = False,
     ) -> None:
         if self.session.input_mode == "transcription":
             await self.emit("error", code="transcription_only", recoverable=True)
@@ -272,6 +279,10 @@ class VoiceConnection:
         self.mark_timing(turn.response_id, "accepted")
         await self.repo.save_turn(turn)
         self.turns[turn.response_id] = turn
+        if device_location is not None and needs_device_location(turn.input_text):
+            self.turn_locations[turn.response_id] = device_location
+        if request_location and needs_device_location(turn.input_text):
+            self.location_requests[turn.response_id] = asyncio.get_running_loop().create_future()
         if wake_greeting:
             self.wake_greeting_response_id = turn.response_id
         self.inputs.put_nowait(
@@ -291,6 +302,8 @@ class VoiceConnection:
             duplicate=False,
             **memory_fields,
         )
+        if turn.response_id in self.location_requests:
+            await self.emit("location.request", request_id=turn.response_id, input_id=turn.input_id)
 
     async def restore_approvals(self) -> None:
         state = await self.agent.aget_state(
@@ -348,8 +361,16 @@ class VoiceConnection:
                         await self.emit("error", code="stale_memory_context", recoverable=True)
                     else:
                         pending.set_result(event.context)
+                case LocationResult():
+                    pending_location = self.location_requests.get(event.request_id)
+                    if pending_location is None or pending_location.done():
+                        await self.emit("error", code="stale_location_request", recoverable=True)
+                    else:
+                        pending_location.set_result(event.device_location)
                 case TextInput():
-                    await self.submit(event.text, event.event_id)
+                    await self.submit(
+                        event.text, event.event_id, device_location=event.device_location
+                    )
                 case CommitInput():
                     if self.session.input_mode == "text":
                         await self.emit("error", code="audio_input_disabled", recoverable=True)
@@ -487,7 +508,7 @@ class VoiceConnection:
                                 wake_greeting=True,
                             )
                         elif confirmed and not is_non_actionable_voice_text(confirmed):
-                            await self.submit(confirmed, input_id)
+                            await self.submit(confirmed, input_id, request_location=True)
                 case "session.finished":
                     self.close_reason = "asr_finished"
                     return
@@ -649,11 +670,24 @@ class VoiceConnection:
                 turn.execution_status = "completed"
                 return
             async with asyncio.timeout(180), thread_guard(self.repo, self.session.thread_id):
+                location = self.turn_locations.pop(turn.response_id, None)
+                request = self.location_requests.get(turn.response_id)
+                if request is not None:
+                    try:
+                        async with asyncio.timeout(self.settings.VOICE_LOCATION_TIMEOUT_SECONDS):
+                            location = await request
+                    except TimeoutError:
+                        logger.info(
+                            "Device location request timed out response_id=%s", turn.response_id
+                        )
+                    finally:
+                        self.location_requests.pop(turn.response_id, None)
                 data = StreamInput(
                     message=turn.input_text,
                     model=self.session.model,
                     thread_id=self.session.thread_id,
                     user_id=self.session.user_id,
+                    device_location=location,
                     local_memory=(
                         await self.request_memory_context(turn)
                         if self.session.memory_mode == "local"
@@ -770,6 +804,8 @@ class VoiceConnection:
                 "error", response_id=turn.response_id, code="agent_failed", recoverable=True
             )
         finally:
+            self.turn_locations.pop(turn.response_id, None)
+            self.location_requests.pop(turn.response_id, None)
             await self.repo.save_turn(turn)
 
     async def request_memory_context(self, turn: VoiceTurn) -> LocalMemoryContext:
@@ -924,6 +960,10 @@ class VoiceConnection:
             self.close_reason = "upstream_error"
         finally:
             self.closed.set()
+            for request in self.location_requests.values():
+                request.cancel()
+            self.location_requests.clear()
+            self.turn_locations.clear()
             for turn in self.turns.values():
                 if turn.status in ("queued", "running") or any(
                     s.played_samples < s.samples for s in turn.segments

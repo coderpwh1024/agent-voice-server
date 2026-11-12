@@ -118,6 +118,13 @@ _NESTED_SETTINGS: dict[str, Any] = {
             "explicit_cache_enabled": "DASHSCOPE_EXPLICIT_CACHE_ENABLED",
         },
     },
+    "mcp": {
+        "amap_maps": {
+            "enabled": "AMAP_MCP_ENABLED",
+            "url": "AMAP_MCP_URL",
+            "timeout_seconds": "AMAP_MCP_TIMEOUT_SECONDS",
+        },
+    },
     "authentication": {
         "admin_secret": "AUTH_SECRET",
         "service_account_id": "AUTH_SERVICE_ACCOUNT_ID",
@@ -195,6 +202,7 @@ _NESTED_SETTINGS: dict[str, Any] = {
             "max_sessions": "VOICE_MAX_SESSIONS",
             "duration_seconds": "VOICE_SESSION_SECONDS",
             "idle_seconds": "VOICE_IDLE_SECONDS",
+            "location_timeout_seconds": "VOICE_LOCATION_TIMEOUT_SECONDS",
             "queue_size": "VOICE_QUEUE_SIZE",
         },
         "vad": {
@@ -428,6 +436,7 @@ def apply_remote_settings(
     validated = type(config)(_env_file=None, **values)
     validated.require_model_provider()
     validated.require_voice_configuration()
+    validated.require_amap_mcp_configuration()
     validated.require_mem0_configuration()
     for name in type(config).model_fields:
         setattr(config, name, getattr(validated, name))

@@ -203,6 +203,29 @@ async def test_scoped_facts_and_checkpoint_history(agent_setup):
 
 
 @pytest.mark.asyncio
+async def test_map_answer_does_not_write_route_request_to_long_term_memory(
+    agent_setup, monkeypatch
+):
+    graph, memory, _ = agent_setup
+    monkeypatch.setattr(
+        agent_module,
+        "answer_chat",
+        AsyncMock(
+            return_value=AIMessage(
+                content="路线已查到", response_metadata={"map_status": "succeeded"}
+            )
+        ),
+    )
+
+    result = await graph.ainvoke(
+        {"messages": [HumanMessage(content="从我家到医院怎么走？")]}, config()
+    )
+
+    assert result["messages"][-1].response_metadata["map_status"] == "succeeded"
+    memory.remember.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("memory_state", ["available", "empty", "failed", "disabled"])
 @pytest.mark.parametrize(
     "inputs",

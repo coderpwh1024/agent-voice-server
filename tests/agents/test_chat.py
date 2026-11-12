@@ -10,9 +10,34 @@ from langchain_openai import ChatOpenAI
 
 from app.agents.chat import answer_chat
 from app.core import settings
+from app.schemas.location import DeviceLocation
+from app.services.location import device_location_scope
 from app.services.skills.video_chat import VideoSkillSession
 
 CONFIG = {"configurable": {"user_id": "7", "thread_id": "chat", "model": "qwen3.8-max"}}
+
+
+@pytest.mark.asyncio
+async def test_current_device_location_reaches_map_prompt_for_one_turn(monkeypatch):
+    monkeypatch.setattr(settings, "AMAP_MCP_ENABLED", True)
+    monkeypatch.setattr(settings, "VIDEO_SKILL_ENABLED", False)
+    model = chat_model(AIMessage(content="收到"))
+    human = HumanMessage(content="我现在在哪？")
+    location = DeviceLocation(
+        latitude=39.9,
+        longitude=116.4,
+        accuracy_meters=20,
+        captured_at=datetime.now(UTC),
+    )
+    with device_location_scope(location):
+        await answer_chat(model, [human], CONFIG)
+    first_prompt = model.ainvoke.await_args.args[0]
+    assert first_prompt[-1] is human
+    assert "经度=116.4,纬度=39.9" in first_prompt[-2].content
+    assert human.content == "我现在在哪？"
+
+    await answer_chat(model, [HumanMessage(content="你好")], CONFIG)
+    assert all(message.name != "device_location" for message in model.ainvoke.await_args.args[0])
 
 
 def chat_model(response):

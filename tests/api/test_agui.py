@@ -1,4 +1,5 @@
 import json
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from unittest.mock import patch
 
@@ -235,6 +236,43 @@ def test_agui_device_references_reach_only_the_current_run(test_client, monkeypa
         "/agui/local/run",
         run_input("local-scope-thread", forwardedProps={"configurable": {"user_id": "local-user"}}),
     )
+    assert observed[1] is None
+
+
+def test_agui_uses_only_fresh_device_location_for_current_place(test_client, monkeypatch):
+    from app.services.location import device_location
+
+    observed = []
+
+    async def read_location(state: MessagesState) -> MessagesState:
+        observed.append(device_location())
+        return {"messages": [AIMessage(content="收到")]}
+
+    builder = StateGraph(MessagesState)
+    builder.add_node("read", read_location)
+    builder.set_entry_point("read")
+    builder.add_edge("read", END)
+    graph = builder.compile(checkpointer=MemorySaver())
+    monkeypatch.setattr("app.api.agui.get_agent", lambda _: graph)
+
+    for minutes_ago in (0, 6):
+        location = {
+            "latitude": 39.9,
+            "longitude": 116.4,
+            "accuracy_meters": 20,
+            "captured_at": (datetime.now(UTC) - timedelta(minutes=minutes_ago)).isoformat(),
+        }
+        collect_events(
+            test_client,
+            "/agui/local/run",
+            run_input(
+                thread_id=f"location-{minutes_ago}",
+                messages=[{"id": "msg-1", "role": "user", "content": "我现在在哪？"}],
+                forwardedProps={"device_location": location},
+            ),
+        )
+
+    assert observed[0].longitude == 116.4
     assert observed[1] is None
 
 

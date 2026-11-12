@@ -4771,6 +4771,16 @@
                 "type": "null"
               }
             ]
+          },
+          "device_location": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DeviceLocation"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -5197,6 +5207,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/LocalMemoryContext"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "device_location": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DeviceLocation"
               },
               {
                 "type": "null"
@@ -6658,6 +6678,41 @@
           "text"
         ],
         "title": "LocalMemoryReference"
+      },
+      "DeviceLocation": {
+        "properties": {
+          "latitude": {
+            "type": "number",
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "Latitude"
+          },
+          "longitude": {
+            "type": "number",
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "Longitude"
+          },
+          "accuracy_meters": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Accuracy Meters"
+          },
+          "captured_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Captured At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "latitude",
+          "longitude",
+          "accuracy_meters",
+          "captured_at"
+        ],
+        "title": "DeviceLocation"
       }
     },
     "securitySchemes": {

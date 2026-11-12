@@ -182,6 +182,7 @@ class Settings(BaseSettings):
     VOICE_MAX_SESSIONS: int = Field(default=8, ge=1, le=1000)
     VOICE_SESSION_SECONDS: int = Field(default=1800, ge=60, le=7200)
     VOICE_IDLE_SECONDS: int = Field(default=120, ge=10, le=600)
+    VOICE_LOCATION_TIMEOUT_SECONDS: float = Field(default=40, ge=1, le=90)
     VOICE_UPSTREAM_TIMEOUT: float = Field(default=30, ge=1, le=120)
     VOICE_QUEUE_SIZE: int = Field(default=64, ge=8, le=256)
     VOICE_VAD_SILENCE_MS: int = Field(default=500, ge=200, le=6000)
@@ -245,6 +246,29 @@ class Settings(BaseSettings):
     # MCP Configuration
     GITHUB_PAT: SecretStr | None = None
     MCP_GITHUB_SERVER_URL: str = "https://api.githubcopilot.com/mcp/"
+    AMAP_MCP_ENABLED: bool = False
+    AMAP_MCP_URL: str | None = None
+    AMAP_MCP_TIMEOUT_SECONDS: float = Field(default=20, ge=1, le=60)
+
+    @field_validator("AMAP_MCP_URL")
+    @classmethod
+    def validate_amap_mcp_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        endpoint = urlsplit(value)
+        if (
+            endpoint.scheme != "https"
+            or not endpoint.hostname
+            or not endpoint.hostname.endswith(".maas.aliyuncs.com")
+            or endpoint.port not in (None, 443)
+            or endpoint.username
+            or endpoint.password
+            or endpoint.query
+            or endpoint.fragment
+            or endpoint.path != "/api/v1/mcps/amap-maps/mcp"
+        ):
+            raise ValueError("AMAP_MCP_URL must be the Bailian HTTPS amap-maps MCP endpoint")
+        return value
 
     LANGCHAIN_TRACING_V2: bool = False
     LANGCHAIN_PROJECT: str = "default"
@@ -539,6 +563,18 @@ class Settings(BaseSettings):
             raise ValueError("MEM0_API_KEY or DASHSCOPE_API_KEY is required when MEM0_ENABLED=true")
         if self.MEM0_ENABLED and bool(self.MEM0_RERANK_MODEL) != bool(self.MEM0_RERANK_URL):
             raise ValueError("MEM0_RERANK_MODEL and MEM0_RERANK_URL must be configured together")
+
+    def require_amap_mcp_configuration(self) -> None:
+        if not self.AMAP_MCP_ENABLED:
+            return
+        if not self.NACOS_ENABLED:
+            raise ValueError("Amap MCP must be enabled through Nacos")
+        if (
+            not self.AMAP_MCP_URL
+            or not self.DASHSCOPE_API_KEY
+            or not self.DASHSCOPE_API_KEY.get_secret_value().strip()
+        ):
+            raise ValueError("Amap MCP requires its URL and DASHSCOPE_API_KEY in Nacos")
 
     @computed_field  # type: ignore[prop-decorator]
     @property

@@ -345,6 +345,17 @@
           "minLength": 1,
           "title": "Text",
           "type": "string"
+        },
+        "device_location": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DeviceLocation"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -487,6 +498,91 @@
       ],
       "title": "LocalMemoryReference",
       "type": "object"
+    },
+    "DeviceLocation": {
+      "additionalProperties": false,
+      "properties": {
+        "latitude": {
+          "maximum": 90,
+          "minimum": -90,
+          "title": "Latitude",
+          "type": "number"
+        },
+        "longitude": {
+          "maximum": 180,
+          "minimum": -180,
+          "title": "Longitude",
+          "type": "number"
+        },
+        "accuracy_meters": {
+          "minimum": 0,
+          "title": "Accuracy Meters",
+          "type": "number"
+        },
+        "captured_at": {
+          "format": "date-time",
+          "title": "Captured At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "latitude",
+        "longitude",
+        "accuracy_meters",
+        "captured_at"
+      ],
+      "title": "DeviceLocation",
+      "type": "object"
+    },
+    "LocationResult": {
+      "additionalProperties": false,
+      "properties": {
+        "event_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Event Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "location.result",
+          "title": "Type",
+          "type": "string"
+        },
+        "request_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Request Id",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "ok",
+            "denied",
+            "unavailable"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "device_location": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DeviceLocation"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "event_id",
+        "type",
+        "request_id",
+        "status"
+      ],
+      "title": "LocationResult",
+      "type": "object"
     }
   },
   "discriminator": {
@@ -503,7 +599,8 @@
       "session.close": "#/$defs/CloseSession",
       "session.configure": "#/$defs/Configure",
       "memory.confirm": "#/$defs/MemoryConfirmationInput",
-      "memory.context": "#/$defs/LocalMemoryContextInput"
+      "memory.context": "#/$defs/LocalMemoryContextInput",
+      "location.result": "#/$defs/LocationResult"
     },
     "propertyName": "type"
   },
@@ -513,6 +610,9 @@
     },
     {
       "$ref": "#/$defs/TextInput"
+    },
+    {
+      "$ref": "#/$defs/LocationResult"
     },
     {
       "$ref": "#/$defs/CommitInput"

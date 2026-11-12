@@ -13,7 +13,7 @@ cd agent-voice-server
 
 项目原名为 `agent-service-toolkit`。为兼容现有部署，Nacos 的 `agent-service-toolkit.yaml` Data ID、服务注册名、缓存目录和 PostgreSQL application name 继续使用原值；登录令牌的签发者与受众也保持原协议，无需迁移配置中心或重新登录。Compose 显式保留原项目名 `agent-service-toolkit`，继续使用现有 PostgreSQL、Redis 数据卷；已有 `-p` 或 `COMPOSE_PROJECT_NAME` 配置仍优先。新生成的部署包与安装目录示例使用 `agent-voice-server`，systemd 单元名和服务账号沿用原值；已有 Linux 部署升级前需按实际安装路径调整单元文件。
 
-项目只运行一个 Mem0 主 Agent，内部实现为 `mem0_chat`，现有对外标识 `mem0-chatbot` 保持不变。它负责日常对话、用户长期记忆、邮件 Skill 和视频 Skill；研究、RAG、Supervisor、GitHub MCP 及 `chatbot` 的独立实现和注册均已移除。旧 `chatbot` 请求值只在 API 边界解析到主 Agent，已有 App 无需修改 URL 或参数。
+项目只运行一个 Mem0 主 Agent，内部实现为 `mem0_chat`，现有对外标识 `mem0-chatbot` 保持不变。它负责日常对话、用户长期记忆、邮件 Skill、视频 Skill 和按需加载的高德地图 MCP 查询；研究、RAG、Supervisor、GitHub MCP 及 `chatbot` 的独立实现和注册均已移除。旧 `chatbot` 请求值只在 API 边界解析到主 Agent，已有 App 无需修改 URL 或参数。
 
 兼容新版 Flutter App 的首选记忆方案为手机端 `MEMORY.md`：App 按需提供相关片段，服务端只返回候选，由手机检查版本并写回。原 Mem0 代码、管理接口和旧客户端行为保留为备选。存储位置、开关、协议、遗忘与隐私边界见[手机端 Markdown 记忆](docs/local-memory.md)。
 
@@ -31,6 +31,7 @@ flowchart TD
     Main --> Search[百炼内置联网搜索]
     Main --> Email[当前用户邮件 Skill]
     Main --> Video[视频 Skill / 视频服务]
+    Main --> Maps[百炼高德地图 MCP]
     Main --> Text[根回答流式事件]
     Text --> HTTP
     Text --> TTS[百炼分段 TTS]
@@ -45,9 +46,9 @@ flowchart TD
 1. 校验用户身份与线程归属，恢复历史和待处理业务状态。
 2. 优先处理邮件请求与记忆管理指令。
 3. 召回当前用户的长期事实，将其作为不可信参考传给主模型。
-4. 主模型直接回答，按需使用百炼内置联网搜索，或加载视频 Skill 后执行一次受控操作。
+4. 主模型直接回答，按需使用百炼内置联网搜索，或加载视频 Skill / 高德地图 MCP 后执行受控操作或查询。
 5. 根回答流式发送到 UI；实时语音同时断句、合成 PCM 并下发播放。
-6. 普通聊天等待 Mem0 提取本轮用户事实后完成。邮件和视频分支保留原有提前返回与业务状态。
+6. 普通聊天等待 Mem0 提取本轮用户事实后完成。邮件、视频和地图查询分支提前返回，保留各自业务状态。
 
 视频生成、SMTP 接受、TTS 合成与手机播放分别确认。取消语音不会撤回已提交的邮件或视频任务。
 
@@ -83,7 +84,8 @@ streamlit_app.py         开发聊天界面
 | `app/models/` | 视频持久化记录和 `sql/` 中原有四份数据库定义，继续使用 psycopg |
 | `app/schemas/` | Pydantic 请求、响应、语音事件与业务数据契约 |
 | `app/agents/mem0_chat.py` | 唯一主 Agent；历史、记忆与业务分流 |
-| `app/agents/chat.py` | 主模型调用、提示词上下文与按需视频技能加载 |
+| `app/agents/chat.py`、`app/agents/amap_chat.py` | 主模型调用、提示词上下文与视频 / 地图技能加载 |
+| `app/services/amap_mcp.py` | 百炼高德地图 MCP 的鉴权、连接与资源释放 |
 | `app/services/skills/` | 邮件与视频 Skill 的受控执行 |
 | `app/api/voice_connection.py`、`app/services/voice/` | WebSocket 会话、ASR/TTS 供应商、断句与播放协调 |
 | `app/services/memory/`、`app/core/database.py` | Mem0 SDK、长期记忆服务、PostgreSQL 检查点与 Store |
@@ -113,12 +115,12 @@ streamlit_app.py         开发聊天界面
 
 `/info` 与 `/voice/capabilities` 只列出 `mem0-chatbot`。语音创建请求的 `agent_id` 默认仍为 `chatbot`，由后端映射到同一主 Agent。继续已有线程时应继续使用该线程原来的标识，后端不改写其所有权或检查点 metadata。
 
-其他 Agent 标识返回 404。旧数据库、历史记录与记忆不在本次收敛中删除或迁移。旧 Nacos 的研究、RAG、MCP 配置字段仍接受加载，但不能恢复已移除的独立研究能力。主 Agent 使用百炼模型时，普通回答默认开启百炼内置联网搜索；可通过 Nacos 的 `models.dashscope.enable_search` 或环境变量 `DASHSCOPE_ENABLE_SEARCH` 关闭。搜索按模型请求决定是否实际触发，不能把开关开启等同于已完成联网核实。Streamlit 和事件层保留旧历史消息的兼容展示与协议解析。
+其他 Agent 标识返回 404。旧数据库、历史记录与记忆不在本次收敛中删除或迁移。旧 Nacos 的研究、RAG、GitHub MCP 配置字段仍接受加载，但不能恢复已移除的独立研究能力。主 Agent 使用百炼模型时，普通回答默认开启百炼内置联网搜索；可通过 Nacos 的 `models.dashscope.enable_search` 或环境变量 `DASHSCOPE_ENABLE_SEARCH` 关闭。搜索按模型请求决定是否实际触发，不能把开关开启等同于已完成联网核实。Streamlit 和事件层保留旧历史消息的兼容展示与协议解析。
 
 ## 执行过程与恢复
 
 主 Agent 按真实业务边界发布 `execution.progress`，覆盖记忆检索与整理、回复生成、
-邮件请求与提交、视频 Skill 加载、参数检查和操作。步骤包含运行 ID、步骤 ID、单调递增的
+邮件请求与提交、视频 Skill 加载、地图查询、参数检查和操作。步骤包含运行 ID、步骤 ID、单调递增的
 序号、状态和实际耗时；不输出模型内部推理、提示词、供应商原始载荷或虚构进度百分比。
 
 - SSE：现有 `message` 事件中的 `ChatMessage(type="custom").custom_data`。
@@ -180,6 +182,24 @@ uv run streamlit run streamlit_app.py
 ```
 
 运行时聊天、记忆 Prompt 与邮件 / 视频 Skill 由 Nacos 加载。密钥放在配置中心或忽略的环境覆盖文件中，不提交到仓库。
+
+高德地图 MCP 使用百炼的 Streamable HTTP 接口，在主 Agent 收到地图相关请求时按需连接。将以下字段合并到现有 Nacos `agent-service-toolkit.yaml`（使用部署环境实际的 Data ID、Group 和命名空间），保留原有配置；API Key 使用同一区域的百炼密钥，不写入仓库：
+
+```yaml
+models:
+  dashscope:
+    api_key: <百炼 API Key，若现有 Nacos 配置已有该项则无需重复>
+mcp:
+  amap_maps:
+    enabled: true
+    url: https://<百炼工作空间域名>.cn-beijing.maas.aliyuncs.com/api/v1/mcps/amap-maps/mcp
+    timeout_seconds: 20
+```
+
+地图 MCP 默认关闭，仅接受百炼 `https` 地图端点；启用后启动时校验 Nacos 和密钥配置。当前允许查询天气、地点、地理编码、距离和路线，不调用 IP 定位或修改类工具。地图结果属于外部不可信数据，调用失败时返回可重试提示。接口通过已有文字、SSE、AG-UI 和语音 Agent 链路提供，无需新增路由。
+
+手机 App 对“我现在在哪”“我附近有什么”等当前地点请求按需申请前台定位权限，并在本轮 `input.text.device_location` 中传递经纬度、精度和 UTC 采集时间。语音转写得到这类请求后，服务端发出 `location.request`（含 `request_id`、`input_id`），App 以 `location.result` 回复 `ok`、`denied` 或 `unavailable`；`ok` 时附同格式的 `device_location`。坐标只在当前 Agent 运行中使用，不写入聊天消息、检查点或语音记录。坐标须为五分钟内采集；拒绝权限、定位失败或等待超时会继续处理原问题，并请用户提供地点。指定地名的查询不需要手机定位。
+语音定位回复的等待上限由 Nacos `voice.session.location_timeout_seconds` 控制，默认 40 秒，以覆盖手机冷启动定位。
 
 ## 验证
 

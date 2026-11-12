@@ -36,6 +36,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     nacos = NacosIntegration(settings)
     try:
         await nacos.load_remote_config()
+        settings.require_amap_mcp_configuration()
         # Initialize both checkpointer (for short-term memory) and store (for long-term memory)
         async with initialize_database() as saver, initialize_store() as store:
             # Set up both components

@@ -125,6 +125,7 @@ class ExecutionTrace:
         outcome: ExecutionStatus = "succeeded"
         business_status = (
             metadata.get("video_status")
+            or metadata.get("map_status")
             or metadata.get("email_status")
             or metadata.get("memory_status")
             or metadata.get("tool_status")

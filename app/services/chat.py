@@ -16,6 +16,7 @@ from app.repositories.voice import VoiceRepository
 from app.schemas import ChatMessage, UserInput
 from app.schemas.execution import MemoryConfirmation
 from app.services.agent_runner import delivery_context
+from app.services.location import device_location_scope, needs_device_location
 from app.services.memory.local_context import DeviceMemory, device_memory_scope
 from app.services.messages import ensure_model_available, langchain_to_chat_message
 
@@ -63,6 +64,7 @@ async def build_run_input(
             "execution_run_id",
             "execution_response_id",
             "local_memory",
+            "device_location",
             "memory_mode",
         }
         if overlap := reserved_keys & user_input.agent_config.keys():
@@ -109,6 +111,12 @@ async def build_run_input(
         if not settings.LOCAL_MEMORY_ENABLED:
             raise ServiceError(503, "Device memory is disabled")
         kwargs["_device_memory"] = DeviceMemory(user_id, thread_id, user_input.local_memory)
+    if (
+        user_input.device_location is not None
+        and user_input.device_location.is_fresh()
+        and needs_device_location(user_input.message)
+    ):
+        kwargs["_device_location"] = user_input.device_location
 
     if repo:
         await repo.register_run(str(run_id), user_id, thread_id)
@@ -137,7 +145,10 @@ async def invoke_agent(
     )
 
     try:
-        with device_memory_scope(kwargs.pop("_device_memory", None)):
+        with (
+            device_memory_scope(kwargs.pop("_device_memory", None)),
+            device_location_scope(kwargs.pop("_device_location", None)),
+        ):
             response_events: list[tuple[str, Any]] = await agent.ainvoke(**kwargs, stream_mode=["updates", "values"])  # type: ignore # fmt: skip
         response_type, response = response_events[-1]
         # A run that stops on an interrupt reports it on the final event of either stream
