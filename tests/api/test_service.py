@@ -471,6 +471,19 @@ def test_stream_validation_keeps_fastapi_protocol_error(test_client) -> None:
     assert "code" not in response.json()
 
 
+@pytest.mark.parametrize("body", [{}, {"prompt": "   "}, {"title": "   "}])
+def test_video_validation_errors_are_serializable_and_keep_http_422(
+    test_client: TestClient, body: dict[str, str]
+) -> None:
+    response = test_client.post("/videos", json=body)
+
+    assert response.status_code == 422
+    payload = response.json()
+    assert payload["code"] == 422
+    assert payload["message"] == "Validation error"
+    assert any(error["type"] == "value_error" for error in payload["data"])
+
+
 def test_unhandled_errors_use_standard_response_envelope() -> None:
     error_app = FastAPI()
     error_app.add_exception_handler(Exception, api_unhandled_exception_handler)

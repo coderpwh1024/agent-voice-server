@@ -38,13 +38,15 @@ async def api_http_exception_handler(request: Request, exc: StarletteHTTPExcepti
     )
 
 
-async def api_validation_exception_handler(request: Request, exc: RequestValidationError):
+async def api_validation_exception_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
     if _uses_protocol_response(request.url.path):
         return await request_validation_exception_handler(request, exc)
     response = ApiResponse[list[dict[str, Any]]](
         code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         message="Validation error",
-        data=exc.errors(),
+        data=jsonable_encoder(exc.errors()),
     )
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
