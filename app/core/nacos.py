@@ -122,6 +122,8 @@ _NESTED_SETTINGS: dict[str, Any] = {
         "amap_maps": {
             "enabled": "AMAP_MCP_ENABLED",
             "url": "AMAP_MCP_URL",
+            "api_key": "AMAP_MCP_API_KEY",
+            "provider_api_key": "AMAP_MAPS_API_KEY",
             "timeout_seconds": "AMAP_MCP_TIMEOUT_SECONDS",
         },
     },

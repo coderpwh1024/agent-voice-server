@@ -33,6 +33,7 @@ from app.schemas.voice import (
     Configure,
     LocalMemoryContextInput,
     LocationResult,
+    LocationUpdate,
     MemoryConfirmationInput,
     Ping,
     PlaybackFinished,
@@ -117,6 +118,8 @@ class VoiceConnection:
         self.memory_requests: dict[str, asyncio.Future[LocalMemoryContext]] = {}
         self.location_requests: dict[str, asyncio.Future[DeviceLocation | None]] = {}
         self.turn_locations: dict[str, DeviceLocation] = {}
+        self.latest_location: DeviceLocation | None = None
+        self.location_status: str | None = None
 
     def remember(self, event_id: str) -> bool:
         if event_id in self.seen:
@@ -279,10 +282,14 @@ class VoiceConnection:
         self.mark_timing(turn.response_id, "accepted")
         await self.repo.save_turn(turn)
         self.turns[turn.response_id] = turn
-        if device_location is not None and needs_device_location(turn.input_text):
-            self.turn_locations[turn.response_id] = device_location
-        if request_location and needs_device_location(turn.input_text):
-            self.location_requests[turn.response_id] = asyncio.get_running_loop().create_future()
+        if needs_device_location(turn.input_text):
+            location = device_location if device_location is not None else self.latest_location
+            if location is not None and location.is_fresh():
+                self.turn_locations[turn.response_id] = location
+            elif request_location and self.location_status not in {"denied", "unavailable"}:
+                self.location_requests[turn.response_id] = (
+                    asyncio.get_running_loop().create_future()
+                )
         if wake_greeting:
             self.wake_greeting_response_id = turn.response_id
         self.inputs.put_nowait(
@@ -367,6 +374,16 @@ class VoiceConnection:
                         await self.emit("error", code="stale_location_request", recoverable=True)
                     else:
                         pending_location.set_result(event.device_location)
+                case LocationUpdate():
+                    self.latest_location = (
+                        event.device_location
+                        if event.device_location is not None and event.device_location.is_fresh()
+                        else None
+                    )
+                    self.location_status = event.status
+                    for pending_location in self.location_requests.values():
+                        if not pending_location.done():
+                            pending_location.set_result(self.latest_location)
                 case TextInput():
                     await self.submit(
                         event.text, event.event_id, device_location=event.device_location
@@ -940,6 +957,7 @@ class VoiceConnection:
                     "session.ready",
                     protocol_version=1,
                     input_mode=self.session.input_mode,
+                    location_updates=True,
                     input_format="pcm16_16000_mono",
                     output_format="pcm16_24000_mono",
                     audio_header_bytes=45,
@@ -964,6 +982,7 @@ class VoiceConnection:
                 request.cancel()
             self.location_requests.clear()
             self.turn_locations.clear()
+            self.latest_location = None
             for turn in self.turns.values():
                 if turn.status in ("queued", "running") or any(
                     s.played_samples < s.samples for s in turn.segments

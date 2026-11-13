@@ -273,6 +273,38 @@ def test_text_device_location_is_one_turn_only(voice_env):
     assert all("116.4" not in str(turn.model_dump()) for turn in repo.records.values())
 
 
+@pytest.mark.parametrize("status", ["ok", "denied", "stale"])
+def test_foreground_location_updates_are_scoped_to_connection(voice_env, status):
+    client, repo, agents, headers = voice_env
+    captured = []
+    agents["chatbot"] = location_chatbot(captured)
+    auth = headers()
+    session = create(client, auth, input_mode="text")
+    fix = {
+        "latitude": 39.9,
+        "longitude": 116.4,
+        "accuracy_meters": 20,
+        "captured_at": (
+            datetime.now(UTC) - timedelta(minutes=6 if status == "stale" else 0)
+        ).isoformat(),
+    }
+    with connect(client, session, auth) as ws:
+        ready = configure(ws)
+        assert ready["location_updates"] is True
+        event(ws, "location.update", status="ok", device_location=fix)
+        if status == "denied":
+            event(ws, "location.update", status="denied")
+        event(ws, "input.text", text="附近有哪些商场？")
+        read_until(ws, "response.done")
+        event(ws, "input.text", text="你好")
+        read_until(ws, "response.done")
+        event(ws, "session.close")
+        read_until(ws, "session.closed")
+    assert (captured[0] is not None) == (status == "ok")
+    assert captured[1] is None
+    assert all("116.4" not in str(turn.model_dump()) for turn in repo.records.values())
+
+
 @pytest.mark.parametrize("status", ["ok", "denied", "timeout"])
 def test_asr_requests_location_and_accepts_result(voice_env, monkeypatch, status):
     import app.api.voice as voice_routes
@@ -322,6 +354,54 @@ def test_asr_requests_location_and_accepts_result(voice_env, monkeypatch, status
         assert captured[0].longitude == 116.4
     else:
         assert captured == [None]
+
+
+@pytest.mark.parametrize("status", ["ok", "denied"])
+def test_asr_reuses_foreground_location_without_requesting_another_fix(
+    voice_env, monkeypatch, status
+):
+    import app.api.voice as voice_routes
+
+    class LocationSpeech(FakeSpeech):
+        async def append_audio(self, ws, pcm):
+            await self.events.put(
+                {
+                    "type": "conversation.item.input_audio_transcription.completed",
+                    "item_id": "nearby-speech",
+                    "transcript": "附近有哪些商场？",
+                }
+            )
+
+    monkeypatch.setattr(voice_routes, "AlibabaRealtime", LocationSpeech)
+    monkeypatch.setattr(settings, "VOICE_LOCATION_TIMEOUT_SECONDS", 0.05)
+    client, _repo, agents, headers = voice_env
+    captured = []
+    agents["chatbot"] = location_chatbot(captured)
+    auth = headers()
+    session = create(client, auth)
+    payload = (
+        {
+            "device_location": {
+                "latitude": 39.9,
+                "longitude": 116.4,
+                "accuracy_meters": 20,
+                "captured_at": datetime.now(UTC).isoformat(),
+            }
+        }
+        if status == "ok"
+        else {}
+    )
+    with connect(client, session, auth) as ws:
+        ready = configure(ws)
+        event(ws, "location.update", status=status, **payload)
+        ws.send_bytes(
+            encode_audio(b"\0\0" * 320, ready["connection_id"], str(ZERO_UUID), 0, 0, kind=1)
+        )
+        events = read_until(ws, "response.done")
+        assert not any(item["type"] == "location.request" for item in events)
+        event(ws, "session.close")
+        read_until(ws, "session.closed")
+    assert (captured[0] is not None) == (status == "ok")
 
 
 @pytest.fixture

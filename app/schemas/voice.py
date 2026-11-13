@@ -184,17 +184,24 @@ class TextInput(Event):
     device_location: DeviceLocation | None = None
 
 
-class LocationResult(Event):
-    type: Literal["location.result"]
-    request_id: str = Field(min_length=1, max_length=128)
+class LocationPayload(Event):
     status: Literal["ok", "denied", "unavailable"]
     device_location: DeviceLocation | None = None
 
     @model_validator(mode="after")
-    def require_location_only_on_success(self) -> "LocationResult":
+    def require_location_only_on_success(self) -> "LocationPayload":
         if (self.status == "ok") != (self.device_location is not None):
             raise ValueError("Location is required only for successful results")
         return self
+
+
+class LocationUpdate(LocationPayload):
+    type: Literal["location.update"]
+
+
+class LocationResult(LocationPayload):
+    type: Literal["location.result"]
+    request_id: str = Field(min_length=1, max_length=128)
 
 
 class CommitInput(Event):
@@ -262,6 +269,7 @@ class CloseSession(Event):
 ClientEvent = Annotated[
     Configure
     | TextInput
+    | LocationUpdate
     | LocationResult
     | CommitInput
     | CancelResponse

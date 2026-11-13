@@ -880,3 +880,53 @@ def test_http_chat_thinking_default_maps_from_nacos():
     assert config.CHAT_LLM_ENABLE_THINKING is False
     nacos.apply_remote_settings(config, "models:\n  chat:\n    enable_thinking: true\n")
     assert config.CHAT_LLM_ENABLE_THINKING is True
+
+
+def test_amap_mcp_accepts_an_independent_bailian_key_from_nacos():
+    config = make_settings(NACOS_ENABLED=True, DASHSCOPE_API_KEY=None)
+    updated = nacos.apply_remote_settings(
+        config,
+        """mcp:
+  amap_maps:
+    enabled: true
+    url: https://dashscope.aliyuncs.com/api/v1/mcps/amap-maps/mcp
+    api_key: dedicated-test-key
+""",
+    )
+    assert "AMAP_MCP_API_KEY" in updated
+    assert config.AMAP_MCP_API_KEY == SecretStr("dedicated-test-key")
+    assert config.DASHSCOPE_API_KEY is None
+    assert "dedicated-test-key" not in repr(config)
+
+
+def test_amap_empty_dedicated_key_does_not_fall_back_to_the_chat_account():
+    config = make_settings(NACOS_ENABLED=True, DASHSCOPE_API_KEY=SecretStr("chat-test-key"))
+    with pytest.raises(ValueError, match="AMAP_MCP_API_KEY"):
+        nacos.apply_remote_settings(
+            config,
+            """mcp:
+  amap_maps:
+    enabled: true
+    url: https://dashscope.aliyuncs.com/api/v1/mcps/amap-maps/mcp
+    api_key: ' '
+""",
+        )
+    assert config.AMAP_MCP_ENABLED is False
+
+
+def test_amap_provider_key_is_loaded_separately_from_bailian_authentication():
+    config = make_settings(NACOS_ENABLED=True)
+    updated = nacos.apply_remote_settings(
+        config,
+        """mcp:
+  amap_maps:
+    enabled: true
+    url: https://llm-example.cn-beijing.maas.aliyuncs.com/api/v1/mcps/amap-maps/mcp
+    api_key: bailian-test-key
+    provider_api_key: amap-provider-test-key
+""",
+    )
+    assert "AMAP_MAPS_API_KEY" in updated
+    assert config.AMAP_MAPS_API_KEY == SecretStr("amap-provider-test-key")
+    assert config.AMAP_MCP_API_KEY == SecretStr("bailian-test-key")
+    assert "amap-provider-test-key" not in repr(config)

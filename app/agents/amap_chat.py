@@ -124,7 +124,7 @@ async def answer_amap(
         return _reply("地图技能加载参数无效，本次没有查询地图。", "invalid")
     await progress("map.lookup", "查询高德地图")
     try:
-        async with asyncio.timeout(settings.AMAP_MCP_TIMEOUT_SECONDS * 4):
+        async with asyncio.timeout(settings.AMAP_MCP_TIMEOUT_SECONDS):
             async with AmapMcpService(settings).connect() as client:
                 available: dict[str, dict[str, Any]] = {}
                 cursor: str | None = None
@@ -179,8 +179,13 @@ async def answer_amap(
                             await progress("map.lookup", "查询高德地图", "failed", "地图工具无效")
                             return _reply("地图查询工具或参数无效，请重新说明。", "invalid")
                     messages.append(decision)
-                    for tool_call in decision.tool_calls:
-                        result = await client.call_tool(tool_call["name"], tool_call["args"])
+                    results = await asyncio.gather(
+                        *(
+                            client.call_tool(tool_call["name"], tool_call["args"])
+                            for tool_call in decision.tool_calls
+                        )
+                    )
+                    for tool_call, result in zip(decision.tool_calls, results, strict=True):
                         if _daily_quota_exceeded(result):
                             await progress(
                                 "map.lookup", "查询高德地图", "failed", "地图账号查询配额已用尽"

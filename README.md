@@ -183,23 +183,59 @@ uv run streamlit run streamlit_app.py
 
 运行时聊天、记忆 Prompt 与邮件 / 视频 Skill 由 Nacos 加载。密钥放在配置中心或忽略的环境覆盖文件中，不提交到仓库。
 
-高德地图 MCP 使用百炼的 Streamable HTTP 接口，在主 Agent 收到地图相关请求时按需连接。将以下字段合并到现有 Nacos `agent-service-toolkit.yaml`（使用部署环境实际的 Data ID、Group 和命名空间），保留原有配置；API Key 使用同一区域的百炼密钥，不写入仓库：
+高德地图通过 MCP Python SDK 连接百炼 Streamable HTTP 服务，在主 Agent 收到地图相关
+请求时按需连接。将以下字段合并到现有 Nacos `agent-service-toolkit.yaml`（使用部署环境
+实际的 Data ID、Group 和命名空间），保留原有配置；接入地址与 API Key 以百炼服务详情页
+的 SDK 配置为准，不写入仓库：
 
 ```yaml
-models:
-  dashscope:
-    api_key: <百炼 API Key，若现有 Nacos 配置已有该项则无需重复>
 mcp:
   amap_maps:
     enabled: true
     url: https://<百炼工作空间域名>.cn-beijing.maas.aliyuncs.com/api/v1/mcps/amap-maps/mcp
+    api_key: <百炼通用 API Key>
+    provider_api_key: <高德供应商 Key，用于百炼侧商业服务绑定>
     timeout_seconds: 20
 ```
+
+`mcp.amap_maps.api_key` 使用 `SecretStr`，可独立指定百炼通用 API Key；未配置时兼容原有
+`models.dashscope.api_key`。显式配置的专用 Key 无效或为空时不会改用聊天账号重试。
+SDK 同时支持百炼详情页的工作空间域名及官方 `dashscope.aliyuncs.com` 接入地址，均
+要求 HTTPS、固定的高德 MCP 路径及 Bearer 请求头，不将密钥放入 URL。
+
+URL、百炼鉴权 Key 和高德供应商 Key 统一保存在上述 `agent-service-toolkit.yaml` 的
+`mcp.amap_maps` 节点，不使用独立凭据 Data ID。`provider_api_key` 映射到
+`AMAP_MAPS_API_KEY`，同样使用 `SecretStr`；它用于保存百炼云端部署所需的供应商凭据，
+不会替代 SDK 的百炼鉴权 Key，也不会自动修改百炼托管实例的配置。这里需要真实的
+高德 Web 服务 Key，不能填写应用名称、Key 名称或 KMS 凭据名称。百炼侧使用 KMS
+绑定时，先完成百炼访问 KMS 的服务授权，再创建并选择包含该 Key 的凭据。
+
+商业额度取决于百炼侧已开通的服务及绑定的高德商业 `AMAP_MAPS_API_KEY`，不是本地
+SDK 开关；仅更换百炼接入域名或复制同一个 Key 不代表已开通付费服务。先在百炼完成
+商业服务绑定，再把该实例的 SDK 地址与百炼鉴权 Key 用 `nacos-cli config-set` 更新到
+配置中心，保留完整配置并回读验证。高德供应商 Key 不作为工具参数或猜测的 HTTP 请求头
+发送。参考[百炼官方 MCP 服务](https://docs.agent.bailian.aliyun.com/zh/mcp/official-services)
+和[SDK 外部调用](https://docs.agent.bailian.aliyun.com/zh/mcp/external-invocation)。
+
+SDK 直接使用百炼支持的 `initialize` 握手，避免先请求不支持的 `server/discover`。
+如果网关返回高德供应商错误而非 MCP JSON-RPC，立即中止连接并仅记录 HTTP 状态和
+数值错误码，不把供应商原始响应或密钥写入日志。
 
 地图 MCP 默认关闭，仅接受百炼 `https` 地图端点；启用后启动时校验 Nacos 和密钥配置。当前允许查询天气、地点、地理编码、距离和路线，不调用 IP 定位或修改类工具。地图结果属于外部不可信数据，调用失败时返回可重试提示。接口通过已有文字、SSE、AG-UI 和语音 Agent 链路提供，无需新增路由。
 
 手机 App 对“我现在在哪”“我附近有什么”等当前地点请求按需申请前台定位权限，并在本轮 `input.text.device_location` 中传递经纬度、精度和 UTC 采集时间。语音转写得到这类请求后，服务端发出 `location.request`（含 `request_id`、`input_id`），App 以 `location.result` 回复 `ok`、`denied` 或 `unavailable`；`ok` 时附同格式的 `device_location`。坐标只在当前 Agent 运行中使用，不写入聊天消息、检查点或语音记录。坐标须为五分钟内采集；拒绝权限、定位失败或等待超时会继续处理原问题，并请用户提供地点。指定地名的查询不需要手机定位。
-语音定位回复的等待上限由 Nacos `voice.session.location_timeout_seconds` 控制，默认 40 秒，以覆盖手机冷启动定位。
+App 首次启动时请求前台定位权限，并在前台更新位置。支持该能力的后端在
+`session.ready` 中返回 `location_updates: true`，App 随后通过 `location.update`
+传递 `status` 和可选的 `device_location`；旧后端仍使用原有逐轮定位协议。
+坐标只在当前连接内缓存，位置相关提问复用五分钟内的新鲜坐标；拒绝权限、进入后台或
+断开连接时清除可用位置，不写入对话检查点、运行 metadata 或长期记忆。
+`device_location.coordinate_system` 默认 `wgs84`，也接受已转换的 `gcj02`；国内 GPS
+坐标在查询高德前转换，避免直接混用坐标系。
+
+语音定位回复的等待上限由 Nacos `voice.session.location_timeout_seconds` 控制，默认
+10 秒；已有有效位置或已知定位不可用时不等待。高德 MCP 整个查询流程共用
+`mcp.amap_maps.timeout_seconds` 的时间预算，默认 20 秒，同轮独立查询并行执行。
+周边或关键词搜索返回配额错误时明确说明，不重试耗尽的配额或编造地点。
 
 ## 验证
 

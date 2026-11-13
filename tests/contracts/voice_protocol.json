@@ -523,6 +523,15 @@
           "format": "date-time",
           "title": "Captured At",
           "type": "string"
+        },
+        "coordinate_system": {
+          "default": "wgs84",
+          "enum": [
+            "wgs84",
+            "gcj02"
+          ],
+          "title": "Coordinate System",
+          "type": "string"
         }
       },
       "required": [
@@ -577,11 +586,54 @@
       },
       "required": [
         "event_id",
+        "status",
         "type",
-        "request_id",
-        "status"
+        "request_id"
       ],
       "title": "LocationResult",
+      "type": "object"
+    },
+    "LocationUpdate": {
+      "additionalProperties": false,
+      "properties": {
+        "event_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Event Id",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "ok",
+            "denied",
+            "unavailable"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "device_location": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DeviceLocation"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "type": {
+          "const": "location.update",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "status",
+        "type"
+      ],
+      "title": "LocationUpdate",
       "type": "object"
     }
   },
@@ -600,7 +652,8 @@
       "session.configure": "#/$defs/Configure",
       "memory.confirm": "#/$defs/MemoryConfirmationInput",
       "memory.context": "#/$defs/LocalMemoryContextInput",
-      "location.result": "#/$defs/LocationResult"
+      "location.result": "#/$defs/LocationResult",
+      "location.update": "#/$defs/LocationUpdate"
     },
     "propertyName": "type"
   },
@@ -610,6 +663,9 @@
     },
     {
       "$ref": "#/$defs/TextInput"
+    },
+    {
+      "$ref": "#/$defs/LocationUpdate"
     },
     {
       "$ref": "#/$defs/LocationResult"

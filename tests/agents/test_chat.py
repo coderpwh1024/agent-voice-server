@@ -22,6 +22,8 @@ async def test_current_device_location_reaches_map_prompt_for_one_turn(monkeypat
     monkeypatch.setattr(settings, "AMAP_MCP_ENABLED", True)
     monkeypatch.setattr(settings, "VIDEO_SKILL_ENABLED", False)
     model = chat_model(AIMessage(content="收到"))
+    map_answer = AsyncMock(return_value=AIMessage(content="地图结果"))
+    monkeypatch.setattr("app.agents.chat.answer_amap", map_answer)
     human = HumanMessage(content="我现在在哪？")
     location = DeviceLocation(
         latitude=39.9,
@@ -31,10 +33,11 @@ async def test_current_device_location_reaches_map_prompt_for_one_turn(monkeypat
     )
     with device_location_scope(location):
         await answer_chat(model, [human], CONFIG)
-    first_prompt = model.ainvoke.await_args.args[0]
+    first_prompt = map_answer.await_args.args[1]
     assert first_prompt[-1] is human
-    assert "经度=116.4,纬度=39.9" in first_prompt[-2].content
+    assert "经度=116.406243,纬度=39.901404" in first_prompt[-2].content
     assert human.content == "我现在在哪？"
+    model.ainvoke.assert_not_awaited()
 
     await answer_chat(model, [HumanMessage(content="你好")], CONFIG)
     assert all(message.name != "device_location" for message in model.ainvoke.await_args.args[0])

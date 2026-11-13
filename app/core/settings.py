@@ -182,7 +182,7 @@ class Settings(BaseSettings):
     VOICE_MAX_SESSIONS: int = Field(default=8, ge=1, le=1000)
     VOICE_SESSION_SECONDS: int = Field(default=1800, ge=60, le=7200)
     VOICE_IDLE_SECONDS: int = Field(default=120, ge=10, le=600)
-    VOICE_LOCATION_TIMEOUT_SECONDS: float = Field(default=40, ge=1, le=90)
+    VOICE_LOCATION_TIMEOUT_SECONDS: float = Field(default=10, ge=1, le=90)
     VOICE_UPSTREAM_TIMEOUT: float = Field(default=30, ge=1, le=120)
     VOICE_QUEUE_SIZE: int = Field(default=64, ge=8, le=256)
     VOICE_VAD_SILENCE_MS: int = Field(default=500, ge=200, le=6000)
@@ -248,6 +248,8 @@ class Settings(BaseSettings):
     MCP_GITHUB_SERVER_URL: str = "https://api.githubcopilot.com/mcp/"
     AMAP_MCP_ENABLED: bool = False
     AMAP_MCP_URL: str | None = None
+    AMAP_MCP_API_KEY: SecretStr | None = None
+    AMAP_MAPS_API_KEY: SecretStr | None = None
     AMAP_MCP_TIMEOUT_SECONDS: float = Field(default=20, ge=1, le=60)
 
     @field_validator("AMAP_MCP_URL")
@@ -259,7 +261,10 @@ class Settings(BaseSettings):
         if (
             endpoint.scheme != "https"
             or not endpoint.hostname
-            or not endpoint.hostname.endswith(".maas.aliyuncs.com")
+            or not (
+                endpoint.hostname == "dashscope.aliyuncs.com"
+                or endpoint.hostname.endswith(".maas.aliyuncs.com")
+            )
             or endpoint.port not in (None, 443)
             or endpoint.username
             or endpoint.password
@@ -569,12 +574,11 @@ class Settings(BaseSettings):
             return
         if not self.NACOS_ENABLED:
             raise ValueError("Amap MCP must be enabled through Nacos")
-        if (
-            not self.AMAP_MCP_URL
-            or not self.DASHSCOPE_API_KEY
-            or not self.DASHSCOPE_API_KEY.get_secret_value().strip()
-        ):
-            raise ValueError("Amap MCP requires its URL and DASHSCOPE_API_KEY in Nacos")
+        key = self.AMAP_MCP_API_KEY if self.AMAP_MCP_API_KEY is not None else self.DASHSCOPE_API_KEY
+        if not self.AMAP_MCP_URL or key is None or not key.get_secret_value().strip():
+            raise ValueError(
+                "Amap MCP requires its URL and AMAP_MCP_API_KEY or DASHSCOPE_API_KEY in Nacos"
+            )
 
     @computed_field  # type: ignore[prop-decorator]
     @property

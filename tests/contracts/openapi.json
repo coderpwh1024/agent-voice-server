@@ -6702,6 +6702,15 @@
             "type": "string",
             "format": "date-time",
             "title": "Captured At"
+          },
+          "coordinate_system": {
+            "type": "string",
+            "enum": [
+              "wgs84",
+              "gcj02"
+            ],
+            "title": "Coordinate System",
+            "default": "wgs84"
           }
         },
         "additionalProperties": false,
