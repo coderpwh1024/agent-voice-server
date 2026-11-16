@@ -17,6 +17,14 @@ cd agent-voice-server
 
 兼容新版 Flutter App 的首选记忆方案为手机端 `MEMORY.md`：App 按需提供相关片段，服务端只返回候选，由手机检查版本并写回。原 Mem0 代码、管理接口和旧客户端行为保留为备选。存储位置、开关、协议、遗忘与隐私边界见[手机端 Markdown 记忆](docs/local-memory.md)。
 
+Agent 回归评测使用固定的业务场景清单，覆盖记忆、邮件、视频、地图、权限、流式与语音交付：
+
+```sh
+uv run --frozen python scripts/evaluate_agent.py
+```
+
+该命令运行 mock/fake 模型下的契约门禁，阻断网络连接并输出分类 JSON 报告；真实模型质量需另行测量。执行和基线比较见 [Agent 评测工作流](docs/agent-evaluation.md)，国内外调研与后续方案见 [Agent 评测分析](docs/research/2026-11-16-agent-evaluation.md)。
+
 ## 请求与语音链路
 
 ```mermaid

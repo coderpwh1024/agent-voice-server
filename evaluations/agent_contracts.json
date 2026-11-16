@@ -1,0 +1,240 @@
+{
+  "schema_version": 1,
+  "name": "agent-contract-v1",
+  "cases": [
+    {
+      "id": "chat-history",
+      "category": "conversation",
+      "title": "同用户跨线程的记忆与检查点",
+      "target": "tests/agents/test_mem0_chat.py::test_scoped_facts_and_checkpoint_history"
+    },
+    {
+      "id": "memory-outages",
+      "category": "conversation",
+      "title": "记忆服务失败时保持回复并报告状态",
+      "target": "tests/agents/test_mem0_chat.py::test_memory_failure_preserves_response_and_reports_status"
+    },
+    {
+      "id": "untrusted-reference",
+      "category": "conversation",
+      "title": "注入内容保持为不可信参考",
+      "target": "tests/agents/test_mem0_chat.py::test_injection_text_stays_in_reference_data"
+    },
+    {
+      "id": "missing-tools",
+      "category": "conversation",
+      "title": "不存在的工具不能执行",
+      "target": "tests/agents/test_chat.py::test_unavailable_tool_calls_are_not_executed_or_returned"
+    },
+    {
+      "id": "search-scope",
+      "category": "conversation",
+      "title": "百炼搜索仅用于配置允许的主回答",
+      "target": "tests/agents/test_chat.py::test_bailian_search_is_scoped_to_main_answer"
+    },
+    {
+      "id": "device-ephemeral",
+      "category": "memory",
+      "title": "本机记忆不写检查点且不调用 Mem0",
+      "target": "tests/agents/test_mem0_chat.py::test_device_memory_is_ephemeral_untrusted_and_never_uses_mem0"
+    },
+    {
+      "id": "forget-epoch",
+      "category": "memory",
+      "title": "遗忘版本隔离后续对话上下文",
+      "target": "tests/agents/test_mem0_chat.py::test_device_forget_epoch_excludes_old_dialogue_on_later_turns"
+    },
+    {
+      "id": "memory-confirmation",
+      "category": "memory",
+      "title": "删除必须确认并使用服务器选定 ID",
+      "target": "tests/agents/test_memory_commands.py::test_delete_requires_spoken_confirmation_and_uses_server_selected_id"
+    },
+    {
+      "id": "memory-expiry",
+      "category": "memory",
+      "title": "过期确认不能变更记忆",
+      "target": "tests/agents/test_memory_commands.py::test_expired_preview_cannot_be_confirmed"
+    },
+    {
+      "id": "memory-negative",
+      "category": "memory",
+      "title": "否定或假设性指令不能变更记忆",
+      "target": "tests/agents/test_memory_commands.py::test_negated_or_hypothetical_commands_do_not_mutate"
+    },
+    {
+      "id": "device-proposal",
+      "category": "memory",
+      "title": "本机变更候选必须经设备确认",
+      "target": "tests/api/test_local_memories.py::test_mutation_proposal_always_requires_device_confirmation"
+    },
+    {
+      "id": "email-bound-user",
+      "category": "email",
+      "title": "邮件绑定认证用户与原输入 ID",
+      "target": "tests/agents/test_email_commands.py::test_spoken_request_sends_only_to_authenticated_identity"
+    },
+    {
+      "id": "email-forged-user",
+      "category": "email",
+      "title": "伪造或缺失认证身份不能发邮件",
+      "target": "tests/agents/test_email_commands.py::test_missing_or_forged_authenticated_identity_cannot_send"
+    },
+    {
+      "id": "email-no-permission",
+      "category": "email",
+      "title": "讨论取消与其他收件人不能投递",
+      "target": "tests/agents/test_email_commands.py::test_non_send_intents_do_not_deliver"
+    },
+    {
+      "id": "email-draft",
+      "category": "email",
+      "title": "补齐缺失正文后才发送",
+      "target": "tests/agents/test_email_commands.py::test_missing_content_is_collected_before_send"
+    },
+    {
+      "id": "email-unclear-time",
+      "category": "email",
+      "title": "不明确的预约时间不能退化为立即发送",
+      "target": "tests/agents/test_email_commands.py::test_missing_delivery_time_never_falls_back_to_immediate"
+    },
+    {
+      "id": "email-parser-failure",
+      "category": "email",
+      "title": "意图解析失败不发送邮件",
+      "target": "tests/agents/test_email_commands.py::test_intent_failure_is_controlled_and_does_not_send"
+    },
+    {
+      "id": "video-on-demand",
+      "category": "video",
+      "title": "普通聊天不加载完整视频 Skill",
+      "target": "tests/agents/test_video_chat.py::test_ordinary_chat_does_not_load_rules_or_operation_schema"
+    },
+    {
+      "id": "video-owned-count",
+      "category": "video",
+      "title": "按需加载后查询本人视频且不泄露技能历史",
+      "target": "tests/agents/test_video_chat.py::test_on_demand_count_uses_owned_service_without_leaking_skill_history"
+    },
+    {
+      "id": "video-draft-only",
+      "category": "video",
+      "title": "仅保存草稿不提交视频生成",
+      "target": "tests/agents/test_video_chat.py::test_save_only_draft_does_not_submit_generation"
+    },
+    {
+      "id": "video-cancel",
+      "category": "video",
+      "title": "取消在提交之前终止加载的模型",
+      "target": "tests/agents/test_video_chat.py::test_cancellation_stops_loaded_model_before_submission"
+    },
+    {
+      "id": "map-coordinates",
+      "category": "maps",
+      "title": "路线查询先地理编码并使用正确坐标",
+      "target": "tests/agents/test_amap_chat.py::test_amap_route_accepts_two_geocodes_in_one_model_turn"
+    },
+    {
+      "id": "map-no-location",
+      "category": "maps",
+      "title": "无定位时不复用历史或猜测地点",
+      "target": "tests/agents/test_amap_chat.py::test_nearby_query_without_location_does_not_reuse_history_or_invent_a_place"
+    },
+    {
+      "id": "map-tool-allowlist",
+      "category": "maps",
+      "title": "不执行未列入白名单的地图工具",
+      "target": "tests/agents/test_amap_chat.py::test_amap_does_not_execute_unlisted_tool"
+    },
+    {
+      "id": "map-empty",
+      "category": "maps",
+      "title": "空工具结果不能成为地图查询成功回答",
+      "target": "tests/agents/test_amap_chat.py::test_amap_empty_result_does_not_become_a_map_answer"
+    },
+    {
+      "id": "cross-user-memory",
+      "category": "authorization",
+      "title": "本机记忆作用域不能跨用户",
+      "target": "tests/agents/test_mem0_chat.py::test_device_memory_scope_cannot_cross_users"
+    },
+    {
+      "id": "cross-user-confirmation",
+      "category": "authorization",
+      "title": "其他用户不能复用记忆确认检查点",
+      "target": "tests/agents/test_memory_commands.py::test_confirmation_checkpoint_cannot_be_reused_by_another_user"
+    },
+    {
+      "id": "agui-forged-identity",
+      "category": "authorization",
+      "title": "AG-UI 拒绝伪造邮件身份",
+      "target": "tests/api/test_agui.py::test_agui_rejects_forged_email_identity"
+    },
+    {
+      "id": "voice-thread-ownership",
+      "category": "authorization",
+      "title": "语音与线程入口校验令牌和所有权",
+      "target": "tests/voice/test_realtime_service.py::test_tokens_bind_user_and_protect_every_thread_entry"
+    },
+    {
+      "id": "legacy-agent",
+      "category": "transport",
+      "title": "旧 chatbot 线程继续使用原检查点",
+      "target": "tests/api/test_single_agent.py::test_legacy_chatbot_checkpoint_continues_without_data_migration"
+    },
+    {
+      "id": "sse-events",
+      "category": "transport",
+      "title": "SSE 保留 token 最终消息进度与结束标记",
+      "target": "tests/api/test_service_message_generator.py::test_main_agent_stream_keeps_tokens_messages_and_done"
+    },
+    {
+      "id": "agui-progress",
+      "category": "transport",
+      "title": "主 Agent 通过 AG-UI 发布执行进度",
+      "target": "tests/api/test_agui.py::test_main_agent_publishes_execution_progress_over_agui"
+    },
+    {
+      "id": "voice-backpressure",
+      "category": "voice",
+      "title": "慢 TTS 保持回压且不截断音频",
+      "target": "tests/voice/test_realtime_service.py::test_slow_tts_applies_backpressure_without_truncating_audio"
+    },
+    {
+      "id": "voice-reconnect",
+      "category": "voice",
+      "title": "重连输入去重且拒绝第二个连接",
+      "target": "tests/voice/test_realtime_service.py::test_reconnect_deduplicates_text_and_rejects_second_socket"
+    },
+    {
+      "id": "voice-cancellation",
+      "category": "voice",
+      "title": "取消使音频失效并保留可用历史",
+      "target": "tests/voice/test_realtime_service.py::test_cancel_invalidates_audio_and_recovers_functional_history"
+    },
+    {
+      "id": "voice-failure",
+      "category": "voice",
+      "title": "TTS 失败无死锁且不报告虚假成功",
+      "target": "tests/voice/test_realtime_service.py::test_tts_failure_finishes_without_deadlock_or_false_success"
+    },
+    {
+      "id": "execution-cancellation",
+      "category": "execution",
+      "title": "取消保留已完成副作用且将未确认步骤标为未知",
+      "target": "tests/core/test_execution.py::test_cancel_preserves_completed_side_effects_and_marks_inflight_unknown"
+    },
+    {
+      "id": "execution-outcome",
+      "category": "execution",
+      "title": "业务结果与通用执行状态保持区分",
+      "target": "tests/core/test_execution.py::test_business_outcomes_remain_distinct"
+    },
+    {
+      "id": "execution-stale",
+      "category": "execution",
+      "title": "过期执行快照和确认不无限等待",
+      "target": "tests/core/test_execution.py::test_stale_running_snapshot_and_expired_confirmation_do_not_spin_forever"
+    }
+  ]
+}
