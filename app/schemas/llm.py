@@ -18,8 +18,9 @@ class Provider(StrEnum):
 
 
 class AlibabaModelName(StrEnum):
-    """https://help.aliyun.com/zh/model-studio/getting-started/models"""
+    """https://help.aliyun.com/zh/model-studio/models"""
 
+    QWEN_4_MAX = "qwen4-max"
     QWEN_38_MAX = "qwen3.8-max"
 
 

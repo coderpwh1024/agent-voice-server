@@ -114,11 +114,12 @@ def test_get_model_alibaba_bailian_requires_key():
             _get_model_uncached(AlibabaModelName.QWEN_38_MAX)
 
 
+@pytest.mark.parametrize("name", list(AlibabaModelName))
 @pytest.mark.parametrize("thinking", [False, True])
-def test_voice_thinking_override_is_explicit_and_does_not_mutate_text_model(thinking):
+def test_voice_thinking_override_is_explicit_and_does_not_mutate_text_model(name, thinking):
     with patch("app.core.settings.settings.DASHSCOPE_API_KEY", SecretStr("test_key")):
-        text_model = _get_model_uncached(AlibabaModelName.QWEN_38_MAX)
-        voice_model = _get_model_uncached(AlibabaModelName.QWEN_38_MAX, enable_thinking=thinking)
+        text_model = _get_model_uncached(name)
+        voice_model = _get_model_uncached(name, enable_thinking=thinking)
 
     assert text_model.extra_body is None
     assert voice_model.extra_body == {"enable_thinking": thinking}

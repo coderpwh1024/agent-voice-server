@@ -55,6 +55,33 @@ _MAIL_FIELDS = {
 }
 
 
+_MEM0_MODEL_SETTINGS = {
+    "llm_model": "MEM0_LLM_MODEL",
+    "api_key": "MEM0_API_KEY",
+    "base_url": "MEM0_BASE_URL",
+    "embedding_model": "MEM0_EMBEDDING_MODEL",
+    "embedding_dims": "MEM0_EMBEDDING_DIMS",
+    "rerank_model": "MEM0_RERANK_MODEL",
+    "rerank_url": "MEM0_RERANK_URL",
+}
+
+
+_REALTIME_MODEL_SETTINGS = {
+    "url": "VOICE_REALTIME_URL",
+    "proxy": "VOICE_REALTIME_PROXY",
+    "stt_model": "VOICE_REALTIME_STT_MODEL",
+    "tts_model": "VOICE_REALTIME_TTS_MODEL",
+    "stt_protocol": "VOICE_REALTIME_STT_PROTOCOL",
+    "tts_protocol": "VOICE_REALTIME_TTS_PROTOCOL",
+    "stt_url": "VOICE_REALTIME_STT_URL",
+    "tts_url": "VOICE_REALTIME_TTS_URL",
+    "voices_model": "VOICE_REALTIME_VOICES_MODEL",
+    "voice_catalog": "VOICE_REALTIME_VOICE_CATALOG",
+    "voices": "VOICE_REALTIME_VOICES",
+    "upstream_timeout": "VOICE_UPSTREAM_TIMEOUT",
+}
+
+
 _NESTED_SETTINGS: dict[str, Any] = {
     "video": {
         "enabled": "VIDEO_ENABLED",
@@ -82,19 +109,13 @@ _NESTED_SETTINGS: dict[str, Any] = {
             "context_timeout_seconds": "LOCAL_MEMORY_CONTEXT_TIMEOUT_SECONDS",
         },
         "mem0": {
+            **_MEM0_MODEL_SETTINGS,
             "prompt_keys": "MEM0_PROMPT_KEYS",
             "prompt_label": "MEM0_PROMPT_LABEL",
             "enabled": "MEM0_ENABLED",
             "collection_name": "MEM0_COLLECTION_NAME",
-            "llm_model": "MEM0_LLM_MODEL",
-            "api_key": "MEM0_API_KEY",
-            "base_url": "MEM0_BASE_URL",
-            "embedding_model": "MEM0_EMBEDDING_MODEL",
-            "embedding_dims": "MEM0_EMBEDDING_DIMS",
             "top_k": "MEM0_TOP_K",
             "threshold": "MEM0_THRESHOLD",
-            "rerank_model": "MEM0_RERANK_MODEL",
-            "rerank_url": "MEM0_RERANK_URL",
             "rerank_candidates": "MEM0_RERANK_CANDIDATES",
             "rerank_timeout_seconds": "MEM0_RERANK_TIMEOUT_SECONDS",
             "timeout_seconds": "MEM0_TIMEOUT_SECONDS",
@@ -111,11 +132,15 @@ _NESTED_SETTINGS: dict[str, Any] = {
     "models": {
         "chat": {"enable_thinking": "CHAT_LLM_ENABLE_THINKING"},
         "dashscope": {
+            "default_model": "DEFAULT_MODEL",
             "api_key": "DASHSCOPE_API_KEY",
             "base_url": "DASHSCOPE_BASE_URL",
             "enable_search": "DASHSCOPE_ENABLE_SEARCH",
             "embedding_model": "DASHSCOPE_EMBEDDING_MODEL",
             "explicit_cache_enabled": "DASHSCOPE_EXPLICIT_CACHE_ENABLED",
+            "memory": _MEM0_MODEL_SETTINGS,
+            "realtime": _REALTIME_MODEL_SETTINGS,
+            "video": {"api_base_url": "VIDEO_API_BASE_URL"},
         },
     },
     "mcp": {
@@ -186,20 +211,7 @@ _NESTED_SETTINGS: dict[str, Any] = {
         "llm": {
             "enable_thinking": "VOICE_LLM_ENABLE_THINKING",
         },
-        "realtime": {
-            "url": "VOICE_REALTIME_URL",
-            "proxy": "VOICE_REALTIME_PROXY",
-            "stt_model": "VOICE_REALTIME_STT_MODEL",
-            "tts_model": "VOICE_REALTIME_TTS_MODEL",
-            "stt_protocol": "VOICE_REALTIME_STT_PROTOCOL",
-            "tts_protocol": "VOICE_REALTIME_TTS_PROTOCOL",
-            "stt_url": "VOICE_REALTIME_STT_URL",
-            "tts_url": "VOICE_REALTIME_TTS_URL",
-            "voices_model": "VOICE_REALTIME_VOICES_MODEL",
-            "voice_catalog": "VOICE_REALTIME_VOICE_CATALOG",
-            "voices": "VOICE_REALTIME_VOICES",
-            "upstream_timeout": "VOICE_UPSTREAM_TIMEOUT",
-        },
+        "realtime": _REALTIME_MODEL_SETTINGS,
         "session": {
             "max_sessions": "VOICE_MAX_SESSIONS",
             "duration_seconds": "VOICE_SESSION_SECONDS",

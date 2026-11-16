@@ -2500,10 +2500,11 @@
       "AlibabaModelName": {
         "type": "string",
         "enum": [
+          "qwen4-max",
           "qwen3.8-max"
         ],
         "title": "AlibabaModelName",
-        "description": "https://help.aliyun.com/zh/model-studio/getting-started/models"
+        "description": "https://help.aliyun.com/zh/model-studio/models"
       },
       "AllModelEnum": {
         "anyOf": [

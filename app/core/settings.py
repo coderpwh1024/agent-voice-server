@@ -314,7 +314,7 @@ class Settings(BaseSettings):
 
     MEM0_ENABLED: bool = False
     MEM0_COLLECTION_NAME: str = Field(default="mem0_chat", pattern=r"^mem0_[a-z][a-z0-9_]{0,39}$")
-    MEM0_LLM_MODEL: str = Field(default="qwen3.8-max", min_length=1)
+    MEM0_LLM_MODEL: str = Field(default="qwen4-max", min_length=1)
     MEM0_API_KEY: SecretStr | None = None
     MEM0_BASE_URL: Annotated[str, BeforeValidator(check_str_is_http)] | None = None
     MEM0_EMBEDDING_MODEL: str | None = Field(default=None, min_length=1)
@@ -475,7 +475,7 @@ class Settings(BaseSettings):
             match provider:
                 case Provider.ALIBABA:
                     if self.DEFAULT_MODEL is None:
-                        self.DEFAULT_MODEL = AlibabaModelName.QWEN_38_MAX
+                        self.DEFAULT_MODEL = AlibabaModelName.QWEN_4_MAX
                     self.AVAILABLE_MODELS.update(set(AlibabaModelName))
                 case Provider.OPENAI:
                     if self.DEFAULT_MODEL is None:

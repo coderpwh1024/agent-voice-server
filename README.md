@@ -183,6 +183,46 @@ uv run streamlit run streamlit_app.py
 
 运行时聊天、记忆 Prompt 与邮件 / 视频 Skill 由 Nacos 加载。密钥放在配置中心或忽略的环境覆盖文件中，不提交到仓库。
 
+百炼聊天与 Mem0 提取默认使用正式版 `qwen4-max`，仍支持显式选择 `qwen3.8-max`。
+千问模型、百炼接入参数和语音供应商配置统一维护在 Nacos
+`agent-service-toolkit.yaml` 的 `models.dashscope` 中。以下片段应合并到现有文档，保留
+原有认证、存储、音色和其他业务配置：
+
+```yaml
+models:
+  dashscope:
+    default_model: qwen4-max
+    api_key: replace-with-bailian-api-key
+    base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+    embedding_model: qwen3.7-text-embedding
+    memory:
+      llm_model: qwen4-max
+      embedding_model: qwen3.7-text-embedding-flash
+      embedding_dims: 1024
+      rerank_model: qwen3.7-text-rerank
+      rerank_url: https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank
+    realtime:
+      stt_model: qwen-audio-3.1-asr-flash-streaming
+      tts_model: qwen-audio-3.1-tts-flash
+      voices_model: qwen-audio-3.1-tts-flash
+```
+
+`models.dashscope.memory` 可独立配置 `api_key`、`base_url`；未指定时复用百炼公共配置。
+音色、协议、WebSocket 地址和供应商超时同样放在 `models.dashscope.realtime`；视频 API
+地址可放在 `models.dashscope.video.api_base_url`。记忆启停、召回策略和集合名仍放在
+`memory.mem0`，语音启停、会话、VAD 和唤醒规则仍放在 `voice`；聊天与语音的思考开关
+继续使用 `models.chat.enable_thinking` 和 `voice.llm.enable_thinking`。
+
+`local` 和 `test` 的标准启动配置默认启用 Nacos。启动时先读取上述文档，再初始化模型、
+记忆和语音服务；远端显式配置覆盖本地同名设置，文档为空或读取失败时启动失败。
+未指定的字段保留兼容默认值。旧顶层 `DEFAULT_MODEL`、`MEM0_*`、`VOICE_REALTIME_*`，
+以及旧 `memory.mem0` 模型字段、`voice.realtime` 和 `video.api_base_url` 路径仍可加载；
+同一字段使用新旧路径时必须值相同，否则拒绝应用整份配置。
+
+升级已有部署时，先部署支持新分组的代码，再通过 `nacos-cli config-set` 更新文档并回读
+验证，随后重启服务加载配置。现有百炼按量接口地址和 API Key 可继续使用，
+具体地域和账号权限以[官方模型说明](https://help.aliyun.com/zh/model-studio/qwen4-max)为准。
+
 高德地图通过 MCP Python SDK 连接百炼 Streamable HTTP 服务，在主 Agent 收到地图相关
 请求时按需连接。将以下字段合并到现有 Nacos `agent-service-toolkit.yaml`（使用部署环境
 实际的 Data ID、Group 和命名空间），保留原有配置；接入地址与 API Key 以百炼服务详情页

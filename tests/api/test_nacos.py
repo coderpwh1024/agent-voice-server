@@ -8,6 +8,7 @@ from v2.nacos.ai.model.prompt.prompt import Prompt
 import app.core.nacos as nacos
 from app.core.settings import Settings
 from app.core.speech import voice_options
+from app.schemas.llm import AlibabaModelName
 
 
 def test_file_upload_settings_map_from_nacos() -> None:
@@ -286,6 +287,167 @@ def test_nacos_bootstrap_loads_model_provider_from_remote_config() -> None:
     assert config.AVAILABLE_MODELS
 
 
+def test_nacos_loads_qwen4_chat_and_memory_models() -> None:
+    with patch.dict(os.environ, {}, clear=True):
+        config = Settings(
+            _env_file=None,
+            NACOS_ENABLED=True,
+            NACOS_CONFIG_DATA_ID="agent-service-toolkit.yaml",
+        )
+    nacos.apply_remote_settings(
+        config,
+        "DEFAULT_MODEL: qwen4-max\n"
+        "models:\n  dashscope:\n    api_key: test-key\n"
+        "memory:\n  mem0:\n    llm_model: qwen4-max\n",
+    )
+    assert config.DEFAULT_MODEL == AlibabaModelName.QWEN_4_MAX
+    assert config.MEM0_LLM_MODEL == "qwen4-max"
+    assert config.AVAILABLE_MODELS == set(AlibabaModelName)
+
+
+def test_dashscope_group_overrides_local_models_and_preserves_business_settings() -> None:
+    with patch.dict(
+        os.environ,
+        {
+            "DASHSCOPE_API_KEY": "local-key",
+            "DEFAULT_MODEL": "qwen3.8-max",
+            "MEM0_LLM_MODEL": "qwen3.8-max",
+        },
+        clear=True,
+    ):
+        config = Settings(_env_file=None, NACOS_ENABLED=True)
+    nacos.apply_remote_settings(
+        config,
+        """models:
+  dashscope:
+    default_model: qwen4-max
+    api_key: remote-key
+    base_url: https://models.example.com/compatible-mode/v1
+    embedding_model: shared-embedding
+    memory:
+      api_key: memory-key
+      base_url: https://memory.example.com/v1
+      llm_model: qwen4-max
+      embedding_model: memory-embedding
+      embedding_dims: 768
+      rerank_model: qwen3.7-text-rerank
+      rerank_url: https://models.example.com/rerank
+    realtime:
+      url: wss://models.example.com/realtime
+      proxy: null
+      stt_model: qwen-audio-3.1-asr-flash-streaming
+      tts_model: custom-tts
+      tts_protocol: inference
+      stt_url: wss://models.example.com/asr
+      tts_url: wss://models.example.com/tts
+      voices_model: custom-tts
+      voices:
+        - id: custom-voice
+          name: Custom voice
+          languages: [zh]
+      upstream_timeout: 15
+    video:
+      api_base_url: https://models.example.com/api/v1
+memory:
+  mem0:
+    enabled: true
+    collection_name: mem0_grouped
+    top_k: 3
+voice:
+  enabled: true
+  session:
+    max_sessions: 12
+""",
+    )
+    assert config.DEFAULT_MODEL == AlibabaModelName.QWEN_4_MAX
+    assert config.MEM0_LLM_MODEL == "qwen4-max"
+    assert config.DASHSCOPE_API_KEY == SecretStr("remote-key")
+    assert config.DASHSCOPE_BASE_URL == "https://models.example.com/compatible-mode/v1"
+    assert config.MEM0_API_KEY == SecretStr("memory-key")
+    assert config.MEM0_BASE_URL == "https://memory.example.com/v1"
+    assert config.DASHSCOPE_EMBEDDING_MODEL == "shared-embedding"
+    assert config.MEM0_EMBEDDING_MODEL == "memory-embedding"
+    assert config.MEM0_EMBEDDING_DIMS == 768
+    assert config.MEM0_RERANK_MODEL == "qwen3.7-text-rerank"
+    assert config.MEM0_RERANK_URL == "https://models.example.com/rerank"
+    assert config.VOICE_REALTIME_URL == "wss://models.example.com/realtime"
+    assert config.VOICE_REALTIME_PROXY is None
+    assert config.VOICE_REALTIME_TTS_MODEL == "custom-tts"
+    assert config.VOICE_REALTIME_TTS_PROTOCOL == "inference"
+    assert config.VOICE_REALTIME_STT_URL == "wss://models.example.com/asr"
+    assert config.VOICE_REALTIME_TTS_URL == "wss://models.example.com/tts"
+    assert voice_options(config)[0].id == "custom-voice"
+    assert config.VOICE_UPSTREAM_TIMEOUT == 15
+    assert config.VIDEO_API_BASE_URL == "https://models.example.com/api/v1"
+    assert config.MEM0_COLLECTION_NAME == "mem0_grouped"
+    assert config.MEM0_TOP_K == 3
+    assert config.VOICE_MAX_SESSIONS == 12
+
+
+@pytest.mark.parametrize(
+    ("grouped", "legacy", "field"),
+    [
+        (
+            "default_model: qwen4-max",
+            "DEFAULT_MODEL: qwen3.8-max",
+            "DEFAULT_MODEL",
+        ),
+        (
+            "memory:\n      llm_model: qwen4-max",
+            "memory:\n  mem0:\n    llm_model: qwen3.8-max",
+            "MEM0_LLM_MODEL",
+        ),
+        (
+            "realtime:\n      tts_model: new-tts",
+            "voice:\n  realtime:\n    tts_model: old-tts",
+            "VOICE_REALTIME_TTS_MODEL",
+        ),
+        (
+            "video:\n      api_base_url: https://new.example.com",
+            "video:\n  api_base_url: https://old.example.com",
+            "VIDEO_API_BASE_URL",
+        ),
+    ],
+)
+@pytest.mark.parametrize("legacy_first", [False, True])
+def test_dashscope_group_rejects_conflicting_aliases_without_partial_updates(
+    grouped: str, legacy: str, field: str, legacy_first: bool
+) -> None:
+    config = make_settings()
+    before = config.model_dump()
+    sections = [f"models:\n  dashscope:\n    {grouped}\n", legacy + "\n"]
+    if legacy_first:
+        sections.reverse()
+    with pytest.raises(ValueError, match=f"conflicts with {field}"):
+        nacos.apply_remote_settings(config, "".join(sections))
+    assert config.model_dump() == before
+
+
+def test_dashscope_group_accepts_matching_legacy_aliases() -> None:
+    config = make_settings()
+    nacos.apply_remote_settings(
+        config,
+        """models:
+  dashscope:
+    default_model: qwen4-max
+    memory:
+      llm_model: qwen4-max
+    realtime:
+      tts_model: qwen-audio-3.1-tts-flash
+DEFAULT_MODEL: qwen4-max
+memory:
+  mem0:
+    llm_model: qwen4-max
+voice:
+  realtime:
+    tts_model: qwen-audio-3.1-tts-flash
+""",
+    )
+    assert config.DEFAULT_MODEL == AlibabaModelName.QWEN_4_MAX
+    assert config.MEM0_LLM_MODEL == "qwen4-max"
+    assert config.VOICE_REALTIME_TTS_MODEL == "qwen-audio-3.1-tts-flash"
+
+
 def test_wake_configuration_supports_greeting_and_confirmation_timeout() -> None:
     config = make_settings()
     nacos.apply_remote_settings(
@@ -480,6 +642,14 @@ voice:
     [
         ("voice:\n  unknown: true\n", "Unknown Nacos voice settings"),
         (
+            "models:\n  dashscope:\n    memory:\n      unknown: true\n",
+            "Unknown Nacos models.dashscope.memory settings",
+        ),
+        (
+            "models:\n  dashscope:\n    realtime: invalid\n",
+            "Nacos models.dashscope.realtime must be a YAML mapping",
+        ),
+        (
             "voice:\n  enabled: true\nVOICE_ENABLED: false\n",
             "conflicts with VOICE_ENABLED",
         ),
@@ -539,6 +709,64 @@ async def test_load_remote_config(monkeypatch, tmp_path) -> None:
     assert client_config.password == "secret"
     await integration.shutdown()
     config_client.shutdown.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_nacos_bootstrap_loads_grouped_models_without_local_provider(
+    monkeypatch, tmp_path
+) -> None:
+    with patch.dict(os.environ, {}, clear=True):
+        config = Settings(
+            _env_file=None,
+            NACOS_ENABLED=True,
+            NACOS_CONFIG_DATA_ID="agent-service-toolkit.yaml",
+            NACOS_STORAGE_CONFIG_REQUIRED=False,
+            NACOS_CACHE_DIR=str(tmp_path / "cache"),
+            NACOS_LOG_DIR=str(tmp_path / "logs"),
+        )
+    assert config.DEFAULT_MODEL is None
+    client = AsyncMock()
+    client.get_config.return_value = (
+        "models:\n  dashscope:\n    default_model: qwen4-max\n"
+        "    api_key: remote-key\n    memory:\n      llm_model: qwen4-max\n"
+    )
+    monkeypatch.setattr(
+        nacos.NacosConfigService, "create_config_service", AsyncMock(return_value=client)
+    )
+    integration = nacos.NacosIntegration(config)
+    try:
+        await integration.load_remote_config()
+        assert config.DEFAULT_MODEL == AlibabaModelName.QWEN_4_MAX
+        assert config.MEM0_LLM_MODEL == "qwen4-max"
+        assert config.AVAILABLE_MODELS == set(AlibabaModelName)
+    finally:
+        await integration.shutdown()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("unavailable", [False, True])
+async def test_nacos_config_failure_does_not_fall_back_to_local_provider(
+    monkeypatch, tmp_path, unavailable: bool
+) -> None:
+    config = make_settings(
+        NACOS_ENABLED=True,
+        NACOS_CONFIG_DATA_ID="agent-service-toolkit.yaml",
+        NACOS_CACHE_DIR=str(tmp_path / "cache"),
+        NACOS_LOG_DIR=str(tmp_path / "logs"),
+    )
+    client = AsyncMock()
+    client.get_config.return_value = ""
+    if unavailable:
+        client.get_config.side_effect = RuntimeError("Remote configuration is unavailable")
+    monkeypatch.setattr(
+        nacos.NacosConfigService, "create_config_service", AsyncMock(return_value=client)
+    )
+    integration = nacos.NacosIntegration(config)
+    try:
+        with pytest.raises(RuntimeError, match="unavailable"):
+            await integration.load_remote_config()
+    finally:
+        await integration.shutdown()
 
 
 @pytest.mark.asyncio

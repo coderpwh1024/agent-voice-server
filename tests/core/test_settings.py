@@ -340,7 +340,8 @@ def test_settings_with_dashscope_key():
         assert settings.DASHSCOPE_BASE_URL == ("https://dashscope.aliyuncs.com/compatible-mode/v1")
         assert settings.DASHSCOPE_EMBEDDING_MODEL == "qwen3.7-text-embedding"
         assert settings.VOICE_LLM_ENABLE_THINKING is False
-        assert settings.DEFAULT_MODEL == AlibabaModelName.QWEN_38_MAX
+        assert settings.DEFAULT_MODEL == AlibabaModelName.QWEN_4_MAX
+        assert settings.MEM0_LLM_MODEL == "qwen4-max"
         assert settings.AVAILABLE_MODELS == set(AlibabaModelName)
 
 
@@ -354,8 +355,20 @@ def test_settings_dashscope_is_default_with_multiple_api_keys():
         clear=True,
     ):
         settings = Settings(_env_file=None)
-        assert settings.DEFAULT_MODEL == AlibabaModelName.QWEN_38_MAX
+        assert settings.DEFAULT_MODEL == AlibabaModelName.QWEN_4_MAX
         assert settings.AVAILABLE_MODELS == set(AlibabaModelName) | set(OpenAIModelName)
+
+
+def test_settings_keep_explicit_qwen38_model_selection():
+    with patch.dict(os.environ, {"DASHSCOPE_API_KEY": "test_key"}, clear=True):
+        settings = Settings(
+            _env_file=None,
+            DEFAULT_MODEL=AlibabaModelName.QWEN_38_MAX,
+            MEM0_LLM_MODEL="qwen3.8-max",
+        )
+        assert settings.DEFAULT_MODEL == AlibabaModelName.QWEN_38_MAX
+        assert settings.MEM0_LLM_MODEL == "qwen3.8-max"
+        assert AlibabaModelName.QWEN_4_MAX in settings.AVAILABLE_MODELS
 
 
 def test_settings_with_anthropic_key():
