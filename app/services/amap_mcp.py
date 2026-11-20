@@ -1,4 +1,4 @@
-"""Connect to the configured Bailian Amap Maps MCP service."""
+"""Connect directly to the official Amap Maps MCP service."""
 
 import logging
 from collections.abc import AsyncIterator
@@ -13,7 +13,17 @@ from app.core.settings import Settings
 logger = logging.getLogger(__name__)
 
 
+class AmapMcpPlaceholderKey(ValueError):
+    """The Nacos Amap key still has its initial placeholder value."""
+
+
 async def _check_response(response: httpx2.Response) -> None:
+    if response.is_error:
+        logger.error(
+            "Amap MCP HTTP failure method=%s status=%s",
+            response.request.method,
+            response.status_code,
+        )
     if response.request.method != "POST" or not response.headers.get(
         "content-type", ""
     ).lower().startswith("application/json"):
@@ -32,35 +42,36 @@ async def _check_response(response: httpx2.Response) -> None:
     code = str(payload.get("infocode", ""))
     if len(code) != 5 or not code.isascii() or not code.isdigit():
         return
-    logger.warning(
-        "Bailian Amap MCP provider failure http_status=%s provider_code=%s",
+    logger.error(
+        "Amap MCP provider failure http_status=%s provider_code=%s",
         response.status_code,
         code,
     )
-    raise RuntimeError(f"Bailian Amap MCP provider error: {code}")
+    raise RuntimeError(f"Amap MCP provider error: {code}")
 
 
 class AmapMcpService:
     def __init__(self, config: Settings) -> None:
         config.require_amap_mcp_configuration()
         url = config.AMAP_MCP_URL
-        key = (
-            config.AMAP_MCP_API_KEY
-            if config.AMAP_MCP_API_KEY is not None
-            else config.DASHSCOPE_API_KEY
-        )
-        if url is None or key is None:
+        key = config.AMAP_MAPS_API_KEY
+        if not config.AMAP_MCP_ENABLED or url is None or key is None:
             raise ValueError("Amap MCP is not configured")
         self.url = url
-        self.api_key = key.get_secret_value()
+        self._api_key = key
         self.timeout = config.AMAP_MCP_TIMEOUT_SECONDS
 
     @asynccontextmanager
     async def connect(self) -> AsyncIterator[Client]:
+        key = self._api_key.get_secret_value().strip()
+        if key.upper() == "XXXXXXX":
+            raise AmapMcpPlaceholderKey
+        logger.info("Connecting to official Amap MCP")
         async with httpx2.AsyncClient(
-            headers={"Authorization": f"Bearer {self.api_key}"},
+            params={"key": key},
             timeout=httpx2.Timeout(self.timeout, read=300),
             follow_redirects=False,
+            max_redirects=0,
             event_hooks={"response": [_check_response]},
         ) as http_client:
             async with Client(
@@ -68,4 +79,5 @@ class AmapMcpService:
                 read_timeout_seconds=self.timeout,
                 mode="legacy",
             ) as client:
+                logger.info("Official Amap MCP session initialized")
                 yield client

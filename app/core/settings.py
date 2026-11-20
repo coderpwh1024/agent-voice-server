@@ -187,6 +187,10 @@ class Settings(BaseSettings):
     VOICE_QUEUE_SIZE: int = Field(default=64, ge=8, le=256)
     VOICE_VAD_SILENCE_MS: int = Field(default=500, ge=200, le=6000)
     VOICE_VAD_THRESHOLD: float = Field(default=0.2, ge=-1, le=1)
+    VOICE_ASR_VAD_MODEL: Literal["near_meeting_16k", "far_field_meeting_16k"] = "near_meeting_16k"
+    VOICE_INPUT_MIN_SPEECH_MS: int = Field(default=120, ge=0, le=1000)
+    VOICE_INPUT_MIN_ACTIVE_MS: int = Field(default=80, ge=0, le=1000)
+    VOICE_INPUT_RMS_DBFS: float = Field(default=-55, ge=-90, le=-10)
     VOICE_WAKE_ENABLED: bool = True
     VOICE_WAKE_WORD: str = Field(default="小美小美", min_length=2, max_length=40)
     VOICE_WAKE_CONFIRM_WITH_ASR: bool = True
@@ -248,32 +252,8 @@ class Settings(BaseSettings):
     MCP_GITHUB_SERVER_URL: str = "https://api.githubcopilot.com/mcp/"
     AMAP_MCP_ENABLED: bool = False
     AMAP_MCP_URL: str | None = None
-    AMAP_MCP_API_KEY: SecretStr | None = None
     AMAP_MAPS_API_KEY: SecretStr | None = None
     AMAP_MCP_TIMEOUT_SECONDS: float = Field(default=20, ge=1, le=60)
-
-    @field_validator("AMAP_MCP_URL")
-    @classmethod
-    def validate_amap_mcp_url(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        endpoint = urlsplit(value)
-        if (
-            endpoint.scheme != "https"
-            or not endpoint.hostname
-            or not (
-                endpoint.hostname == "dashscope.aliyuncs.com"
-                or endpoint.hostname.endswith(".maas.aliyuncs.com")
-            )
-            or endpoint.port not in (None, 443)
-            or endpoint.username
-            or endpoint.password
-            or endpoint.query
-            or endpoint.fragment
-            or endpoint.path != "/api/v1/mcps/amap-maps/mcp"
-        ):
-            raise ValueError("AMAP_MCP_URL must be the Bailian HTTPS amap-maps MCP endpoint")
-        return value
 
     LANGCHAIN_TRACING_V2: bool = False
     LANGCHAIN_PROJECT: str = "default"
@@ -570,15 +550,17 @@ class Settings(BaseSettings):
             raise ValueError("MEM0_RERANK_MODEL and MEM0_RERANK_URL must be configured together")
 
     def require_amap_mcp_configuration(self) -> None:
+        if self.AMAP_MCP_URL not in (None, "https://mcp.amap.com/mcp"):
+            raise ValueError("AMAP_MCP_URL must be https://mcp.amap.com/mcp without a query")
         if not self.AMAP_MCP_ENABLED:
             return
         if not self.NACOS_ENABLED:
             raise ValueError("Amap MCP must be enabled through Nacos")
-        key = self.AMAP_MCP_API_KEY if self.AMAP_MCP_API_KEY is not None else self.DASHSCOPE_API_KEY
-        if not self.AMAP_MCP_URL or key is None or not key.get_secret_value().strip():
-            raise ValueError(
-                "Amap MCP requires its URL and AMAP_MCP_API_KEY or DASHSCOPE_API_KEY in Nacos"
-            )
+        if not self.AMAP_MCP_URL:
+            raise ValueError("Amap MCP requires AMAP_MCP_URL in Nacos")
+        key = self.AMAP_MAPS_API_KEY
+        if key is None or not key.get_secret_value().strip():
+            raise ValueError("Amap MCP requires AMAP_MAPS_API_KEY in Nacos")
 
     @computed_field  # type: ignore[prop-decorator]
     @property

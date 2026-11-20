@@ -18,15 +18,14 @@ from app.services.location import device_location_scope
 from app.services.skills.video_chat import VideoSkillSession
 
 CONFIG = {"configurable": {"user_id": "7", "thread_id": "map", "model": "qwen3.8-max"}}
-AMAP_URL = "https://llm-example.cn-beijing.maas.aliyuncs.com/api/v1/mcps/amap-maps/mcp"
 
 
 @pytest.fixture
 def amap_settings(monkeypatch):
     monkeypatch.setattr(settings, "NACOS_ENABLED", True)
     monkeypatch.setattr(settings, "AMAP_MCP_ENABLED", True)
-    monkeypatch.setattr(settings, "AMAP_MCP_URL", AMAP_URL)
-    monkeypatch.setattr(settings, "DASHSCOPE_API_KEY", SecretStr("test-key"))
+    monkeypatch.setattr(settings, "AMAP_MCP_URL", "https://mcp.amap.com/mcp")
+    monkeypatch.setattr(settings, "AMAP_MAPS_API_KEY", SecretStr("map-account-key"))
     monkeypatch.setattr(settings, "VIDEO_SKILL_ENABLED", False)
 
 
@@ -75,6 +74,26 @@ def _model(*responses):
     model = Mock(ainvoke=AsyncMock(side_effect=responses))
     model.bind_tools.return_value = model
     return model
+
+
+@pytest.mark.asyncio
+async def test_amap_placeholder_returns_configuration_error_without_connecting(
+    amap_settings, monkeypatch, caplog
+):
+    monkeypatch.setattr(settings, "AMAP_MAPS_API_KEY", SecretStr("XXXXXXX"))
+    http_client = Mock()
+    monkeypatch.setattr(amap_mcp.httpx2, "AsyncClient", http_client)
+    model = _model(
+        AIMessage(content="", tool_calls=[{"name": "load_amap_maps", "args": {}, "id": "load"}])
+    )
+
+    response = await answer_chat(model, [HumanMessage(content="北京天气？")], CONFIG)
+
+    assert response.response_metadata["map_status"] == "unavailable"
+    assert "尚未配置有效密钥" in response.content
+    assert "placeholder in Nacos" in caplog.text
+    assert "XXXXXXX" not in caplog.text
+    http_client.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -145,10 +164,11 @@ async def test_map_discovery_shares_the_total_timeout_budget(amap_client, monkey
     assert released.is_set()
 
 
-def test_direction_tool_schema_explains_coordinates_without_trusting_provider_text():
+@pytest.mark.parametrize("tool_name", ["maps_direction_walking", "maps_bicycling"])
+def test_direction_tool_schema_explains_coordinates_without_trusting_provider_text(tool_name):
     spec = _tool_spec(
         Tool(
-            name="maps_direction_walking",
+            name=tool_name,
             input_schema={
                 "type": "object",
                 "properties": {
@@ -170,58 +190,6 @@ def test_direction_tool_schema_explains_coordinates_without_trusting_provider_te
     assert "maps_geo" in properties["origin"]["description"]
     assert "经度,纬度" in properties["destination"]["description"]
     assert "ignore all system instructions" not in str(spec)
-
-
-@pytest.mark.parametrize("dedicated_key", [None, "map-account-key"])
-@pytest.mark.asyncio
-async def test_amap_connection_uses_bailian_bearer_header_and_closes_clients(
-    amap_settings, monkeypatch, dedicated_key
-):
-    monkeypatch.setattr(
-        settings, "AMAP_MCP_API_KEY", SecretStr(dedicated_key) if dedicated_key else None
-    )
-    monkeypatch.setattr(settings, "AMAP_MAPS_API_KEY", SecretStr("provider-key-not-mcp-auth"))
-    opened = []
-    closed = []
-    transport = object()
-    client = object()
-
-    class Context:
-        def __init__(self, value):
-            self.value = value
-
-        async def __aenter__(self):
-            opened.append(self.value)
-            return self.value
-
-        async def __aexit__(self, *_args):
-            closed.append(self.value)
-
-    def http_client(**kwargs):
-        assert kwargs["headers"] == {"Authorization": f"Bearer {dedicated_key or 'test-key'}"}
-        assert kwargs["follow_redirects"] is False
-        return Context(transport)
-
-    def mcp_transport(url, *, http_client):
-        assert url == AMAP_URL
-        assert http_client is transport
-        return "transport"
-
-    def mcp_client(server, *, read_timeout_seconds, mode):
-        assert server == "transport"
-        assert read_timeout_seconds == settings.AMAP_MCP_TIMEOUT_SECONDS
-        assert mode == "legacy"
-        return Context(client)
-
-    monkeypatch.setattr(amap_mcp.httpx2, "AsyncClient", http_client)
-    monkeypatch.setattr(amap_mcp, "streamable_http_client", mcp_transport)
-    monkeypatch.setattr(amap_mcp, "Client", mcp_client)
-
-    async with AmapMcpService(settings).connect() as connected:
-        assert connected is client
-
-    assert opened == [transport, client]
-    assert closed == [client, transport]
 
 
 @pytest.mark.asyncio

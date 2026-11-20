@@ -4,7 +4,6 @@ import asyncio
 import contextlib
 import logging
 import time
-import unicodedata
 from collections import OrderedDict
 from datetime import UTC, datetime
 from typing import Any
@@ -38,9 +37,11 @@ from app.schemas.voice import (
     Ping,
     PlaybackFinished,
     PlaybackProgress,
+    SpeechEvidence,
     SpeechHint,
     TextInput,
     VoiceSession,
+    VoiceTranscriptReview,
     VoiceTurn,
     client_event_adapter,
     decode_audio,
@@ -49,24 +50,17 @@ from app.schemas.voice import (
 from app.services.agent_runner import graph_events, thread_guard
 from app.services.location import needs_device_location
 from app.services.messages import messages_from_checkpoint
+from app.services.voice.input_filter import (
+    AudioActivity,
+    assess_voice_input,
+    is_non_actionable_voice_text,
+)
 from app.services.voice.providers.alibaba_realtime import AlibabaRealtime
 from app.services.voice.providers.errors import SpeechProviderError
 from app.services.voice.speech_output import SpeechText
 from app.services.voice.wake_word import match_wake_prefix
 
 logger = logging.getLogger(__name__)
-
-
-NON_ACTIONABLE_VOICE_TEXT = frozenset({"嗯", "嗯嗯", "呃", "额", "啊", "呢", "那"})
-
-
-def is_non_actionable_voice_text(text: str) -> bool:
-    normalized = "".join(
-        char
-        for char in text
-        if not char.isspace() and not unicodedata.category(char).startswith("P")
-    )
-    return not normalized or normalized in NON_ACTIONABLE_VOICE_TEXT
 
 
 class VoiceConnection:
@@ -99,6 +93,8 @@ class VoiceConnection:
         self.audio_sequence = 0
         self.input_sequence = -1
         self.input_samples = 0
+        self.audio_activity = AudioActivity(settings.VOICE_INPUT_RMS_DBFS)
+        self.speech_boundaries: OrderedDict[str, tuple[int | None, int | None]] = OrderedDict()
         self.started = time.monotonic()
         self.activity = self.started
         self.seen: OrderedDict[str, None] = OrderedDict()
@@ -472,17 +468,40 @@ class VoiceConnection:
             if pcm is None:
                 await self.provider.commit_audio(asr)
             else:
+                self.audio_activity.append(pcm)
                 await self.provider.append_audio(asr, pcm)
+
+    def speech_evidence(self, item_id: str, event: dict[str, Any]) -> SpeechEvidence | None:
+        start, end = self.speech_boundaries.pop(item_id, (None, None))
+        start = event.get("audio_start_ms", start)
+        end = event.get("audio_end_ms", end)
+        if type(start) is int and type(end) is int and 0 <= start <= end:
+            return self.audio_activity.evidence(start, end)
+        return None
 
     async def recognize(self, asr: Any) -> None:
         while True:
             event = await self.provider.receive(asr, timeout=False)
-            item_id = event.get("item_id", event.get("event_id", ""))
+            raw_item_id = event.get("item_id", event.get("event_id", ""))
+            item_id = raw_item_id if isinstance(raw_item_id, str) else ""
+            if event.get("type") in {
+                "input_audio_buffer.speech_started",
+                "input_audio_buffer.speech_stopped",
+                "conversation.item.input_audio_transcription.completed",
+            } and (not item_id or len(item_id) > 200):
+                raise SpeechProviderError("Recognition event needs a bounded input ID")
             match event.get("type"):
                 case "input_audio_buffer.speech_started":
+                    self.speech_boundaries[item_id] = (event.get("audio_start_ms"), None)
+                    if len(self.speech_boundaries) > 128:
+                        self.speech_boundaries.popitem(last=False)
                     self.activity = time.monotonic()
                     await self.emit("input.started", input_id=item_id)
                 case "input_audio_buffer.speech_stopped":
+                    start, _ = self.speech_boundaries.get(item_id, (None, None))
+                    self.speech_boundaries[item_id] = (start, event.get("audio_end_ms"))
+                    if len(self.speech_boundaries) > 128:
+                        self.speech_boundaries.popitem(last=False)
                     await self.emit("input.ended", input_id=item_id)
                 case "conversation.item.input_audio_transcription.text":
                     text = event.get("text", "") + event.get("stash", "")
@@ -492,7 +511,10 @@ class VoiceConnection:
                         text=(
                             ""
                             if self.session.input_mode != "transcription"
-                            and is_non_actionable_voice_text(text)
+                            and assess_voice_input(
+                                text, self.session.language, self.settings
+                            ).action
+                            != "accept"
                             else text
                         ),
                     )
@@ -510,8 +532,41 @@ class VoiceConnection:
                             match = match_wake_prefix(text, self.session.wake_word or "")
                             if match:
                                 text = match.command
-                        if is_non_actionable_voice_text(text):
+                        playback_text = (
+                            "".join(
+                                segment.text
+                                for segment in self.current.segments
+                                if segment.played_samples < segment.samples or not segment.complete
+                            )
+                            if self.current and self.current.response_id not in self.invalid
+                            else ""
+                        )
+                        evidence = self.speech_evidence(item_id, event)
+                        decision = assess_voice_input(
+                            text,
+                            self.session.language,
+                            self.settings,
+                            evidence=evidence,
+                            playback_text=playback_text,
+                        )
+                        if decision.action != "accept":
                             await self.emit("transcript.final", input_id=input_id, text="")
+                            if decision.action == "review" and not self.wake_transcript_pending:
+                                review = VoiceTranscriptReview.model_validate(
+                                    {"input_id": input_id, "text": text, "reason": decision.reason}
+                                )
+                                await self.emit("transcript.review", **review.model_dump())
+                            logger.info(
+                                "Voice input assessed session_id=%s model=%s action=%s reason=%s "
+                                "characters=%d duration_ms=%s active_ms=%s",
+                                self.session.session_id,
+                                self.settings.VOICE_REALTIME_STT_MODEL,
+                                decision.action,
+                                decision.reason,
+                                len(text),
+                                evidence.duration_ms if evidence else None,
+                                evidence.active_ms if evidence else None,
+                            )
                             continue
                         await self.emit("transcript.final", input_id=input_id, text=text)
                         was_pending = self.wake_transcript_pending
@@ -957,6 +1012,7 @@ class VoiceConnection:
                     "session.ready",
                     protocol_version=1,
                     input_mode=self.session.input_mode,
+                    transcript_review=True,
                     location_updates=True,
                     input_format="pcm16_16000_mono",
                     output_format="pcm16_24000_mono",

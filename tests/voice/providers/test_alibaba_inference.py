@@ -85,6 +85,68 @@ async def test_inference_connection_routes_models_without_query_and_closes_on_ex
 
 
 @pytest.mark.asyncio
+async def test_streaming_asr_receives_noise_threshold_and_near_field_vad():
+    socket = Socket()
+    config = settings(VOICE_VAD_THRESHOLD=0.45)
+    config.VOICE_REALTIME_STT_MODEL = "qwen-audio-3.1-asr-flash-streaming"
+    await InferenceStream(socket, session(), config, "stt").start()
+    parameters = json.loads(socket.sent[0])["payload"]["parameters"]
+    assert parameters["speech_noise_threshold"] == 0.45
+    assert parameters["vad_model"] == "near_meeting_16k"
+
+
+@pytest.mark.asyncio
+async def test_inference_preserves_audio_timing_across_task_restarts():
+    socket = Socket()
+    stream = InferenceStream(socket, session(), settings(), "stt")
+    await stream.start()
+    await stream.append_audio(b"\0\0" * 16000)
+    await stream.start()
+    stream.transcript_events(
+        {
+            "payload": {
+                "output": {
+                    "sentence": {
+                        "sentence_id": 1,
+                        "text": "你好",
+                        "sentence_end": True,
+                        "begin_time": 100,
+                        "end_time": 500,
+                    }
+                }
+            }
+        }
+    )
+    final = list(stream.pending)[-1]
+    assert final["audio_start_ms"] == 1100
+    assert final["audio_end_ms"] == 1500
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("begin,end", [(-1, 5), (10, 5), (True, 10), ("0", 10)])
+async def test_inference_rejects_invalid_sentence_timing(begin, end):
+    socket = Socket()
+    stream = InferenceStream(socket, session(), settings(), "stt")
+    await stream.start()
+    with pytest.raises(SpeechProviderError, match="timing"):
+        stream.transcript_events(
+            {
+                "payload": {
+                    "output": {
+                        "sentence": {
+                            "sentence_id": 1,
+                            "text": "你好",
+                            "sentence_end": True,
+                            "begin_time": begin,
+                            "end_time": end,
+                        }
+                    }
+                }
+            }
+        )
+
+
+@pytest.mark.asyncio
 async def test_transcripts_are_replaced_deduplicated_and_keep_unique_task_ids():
     socket = Socket()
     stream = InferenceStream(socket, session(), settings(), "stt")

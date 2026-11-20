@@ -147,7 +147,7 @@ _NESTED_SETTINGS: dict[str, Any] = {
         "amap_maps": {
             "enabled": "AMAP_MCP_ENABLED",
             "url": "AMAP_MCP_URL",
-            "api_key": "AMAP_MCP_API_KEY",
+            "key": "AMAP_MAPS_API_KEY",
             "provider_api_key": "AMAP_MAPS_API_KEY",
             "timeout_seconds": "AMAP_MCP_TIMEOUT_SECONDS",
         },
@@ -222,8 +222,14 @@ _NESTED_SETTINGS: dict[str, Any] = {
         "vad": {
             "silence_ms": "VOICE_VAD_SILENCE_MS",
             "threshold": "VOICE_VAD_THRESHOLD",
+            "model": "VOICE_ASR_VAD_MODEL",
             "client_rms_dbfs": "VOICE_CLIENT_VAD_RMS_DBFS",
             "client_frames": "VOICE_CLIENT_VAD_FRAMES",
+        },
+        "input_filter": {
+            "min_speech_ms": "VOICE_INPUT_MIN_SPEECH_MS",
+            "min_active_ms": "VOICE_INPUT_MIN_ACTIVE_MS",
+            "rms_dbfs": "VOICE_INPUT_RMS_DBFS",
         },
         "wake": {
             "enabled": "VOICE_WAKE_ENABLED",
@@ -276,6 +282,8 @@ def _flatten_nested_settings(
     for name, item in section.items():
         target = schema[name]
         if isinstance(target, str):
+            if target in flattened and flattened[target] != item:
+                raise ValueError(f"Nacos {path} configuration conflicts for {target}")
             flattened[target] = item
             continue
         flattened.update(_flatten_nested_settings(item, target, f"{path}.{name}"))
@@ -420,6 +428,8 @@ def apply_remote_settings(
         raise ValueError("Nacos configuration keys must be strings")
     payload = _normalize_nested_settings(payload)
     payload = _normalize_mail_settings(payload)
+    if payload.get("AMAP_MCP_URL") is not None or payload.get("AMAP_MAPS_API_KEY") is not None:
+        payload.setdefault("AMAP_MCP_ENABLED", True)
 
     missing = (required_fields or set()) - set(payload)
     if missing:

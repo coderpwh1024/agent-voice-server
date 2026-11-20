@@ -27,7 +27,9 @@ class JsonFormatter(logging.Formatter):
 
 class ServiceLogFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
-        return not record.name.startswith(("mem0", "httpx", "httpcore", "openai", "ddgs", "primp"))
+        return not record.name.startswith(
+            ("mem0", "httpx", "httpcore", "openai", "ddgs", "primp", "mcp.")
+        )
 
 
 def configure_logging(level: LogLevel, log_format: str) -> None:

@@ -33,6 +33,8 @@ class InferenceStream:
         self.sentences: dict[str, str] = {}
         self.started: set[str] = set()
         self.finished: set[str] = set()
+        self.audio_samples = 0
+        self.task_audio_offset_ms = 0
 
     async def send(self, action: str, payload: dict[str, Any]) -> None:
         async with asyncio.timeout(self.config.VOICE_UPSTREAM_TIMEOUT):
@@ -81,6 +83,7 @@ class InferenceStream:
         self.sentences.clear()
         self.started.clear()
         self.finished.clear()
+        self.task_audio_offset_ms = self.audio_samples // 16
         model = (
             self.config.VOICE_REALTIME_STT_MODEL
             if self.role == "stt"
@@ -92,6 +95,10 @@ class InferenceStream:
         }
         if self.role == "stt":
             parameters["max_sentence_silence"] = self.config.VOICE_VAD_SILENCE_MS
+            if model.startswith("qwen-audio-"):
+                parameters["speech_noise_threshold"] = self.config.VOICE_VAD_THRESHOLD
+            if model.startswith("qwen-audio-3.1-"):
+                parameters["vad_model"] = self.config.VOICE_ASR_VAD_MODEL
             if model.startswith("qwen-audio-") and "-message" in model:
                 parameters["intermediate_result_enabled"] = True
             if self.session.language != "auto":
@@ -120,6 +127,7 @@ class InferenceStream:
     async def append_audio(self, pcm: bytes) -> None:
         async with asyncio.timeout(self.config.VOICE_UPSTREAM_TIMEOUT):
             await self.ready.wait()
+            self.audio_samples += len(pcm) // 2
             await self.ws.send(pcm)
 
     async def commit_audio(self) -> None:
@@ -163,6 +171,15 @@ class InferenceStream:
                 }
             )
         elif final:
+            timing: dict[str, int] = {}
+            begin, end = sentence.get("begin_time"), sentence.get("end_time")
+            if begin is not None and end is not None:
+                if type(begin) is not int or type(end) is not int or begin < 0 or end < begin:
+                    raise SpeechProviderError("Invalid inference sentence timing")
+                timing = {
+                    "audio_start_ms": self.task_audio_offset_ms + begin,
+                    "audio_end_ms": self.task_audio_offset_ms + end,
+                }
             self.pending.extend(
                 [
                     {"type": "input_audio_buffer.speech_stopped", "item_id": item_id},
@@ -170,6 +187,7 @@ class InferenceStream:
                         "type": "conversation.item.input_audio_transcription.completed",
                         "item_id": item_id,
                         "transcript": text,
+                        **timing,
                     },
                 ]
             )
@@ -202,6 +220,8 @@ class InferenceStream:
                                 "type": "conversation.item.input_audio_transcription.completed",
                                 "item_id": self.task_id,
                                 "transcript": "".join(self.sentences.values()),
+                                "audio_start_ms": self.task_audio_offset_ms,
+                                "audio_end_ms": self.audio_samples // 16,
                             },
                         ]
                     )

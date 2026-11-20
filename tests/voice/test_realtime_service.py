@@ -1302,7 +1302,98 @@ def test_playback_echo_filler_does_not_cancel_or_start_a_turn(voice_env, monkeyp
     assert not next(iter(repo.records.values())).interrupted
 
 
-@pytest.mark.parametrize("text", ["你好。", "C++ 的 1.5 版本怎么用？", "嗯，帮我查天气。"])
+@pytest.mark.parametrize("text", ["KK.", "Q.", "T.", "C.", "XY", "aaaaaa"])
+def test_suspicious_voice_requires_review_before_starting_or_cancelling_a_turn(
+    voice_env, monkeypatch, text
+):
+    import app.api.voice as voice_routes
+
+    client, repo, _, headers = voice_env
+    monkeypatch.setattr(EchoFillerSpeech, "second_transcript", text)
+    monkeypatch.setattr(voice_routes, "AlibabaRealtime", EchoFillerSpeech)
+    auth = headers()
+    session = create(client, auth)
+    with connect(client, session, auth) as ws:
+        ready = configure(ws)
+        for sequence in range(2):
+            ws.send_bytes(
+                encode_audio(
+                    b"\0\0" * 320,
+                    ready["connection_id"],
+                    str(ZERO_UUID),
+                    0,
+                    sequence,
+                    kind=1,
+                )
+            )
+            events = read_until(ws, "response.done" if sequence == 0 else "transcript.final")
+        assert events[-1]["text"] == ""
+        review = read_until(ws, "transcript.review")[-1]
+        assert review["text"] == text
+        event(ws, "ping")
+        pending = read_until(ws, "pong")
+        assert not any(e["type"] in {"response.cancelled", "input.accepted"} for e in pending)
+        assert len(repo.records) == 1
+        assert not next(iter(repo.records.values())).interrupted
+        event(ws, "input.text", text=text)
+        read_until(ws, "response.done")
+        assert [turn.input_text for turn in repo.records.values()] == ["你好", text]
+        event(ws, "session.close")
+        read_until(ws, "session.closed")
+
+
+@pytest.mark.parametrize("timing", ["inference", "realtime"])
+def test_silent_audio_is_reviewed_without_messages_or_memory_writes(voice_env, monkeypatch, timing):
+    import app.api.voice as voice_routes
+
+    class SilentSpeech(FakeSpeech):
+        async def append_audio(self, ws, pcm):
+            await self.events.put(
+                {
+                    "type": "input_audio_buffer.speech_started",
+                    "item_id": "silent",
+                    "audio_start_ms": 0,
+                }
+            )
+            if timing == "realtime":
+                await self.events.put(
+                    {
+                        "type": "input_audio_buffer.speech_stopped",
+                        "item_id": "silent",
+                        "audio_end_ms": 200,
+                    }
+                )
+            await self.events.put(
+                {
+                    "type": "conversation.item.input_audio_transcription.completed",
+                    "item_id": "silent",
+                    "transcript": "这是一句噪音误识别",
+                    **({"audio_start_ms": 0, "audio_end_ms": 200} if timing == "inference" else {}),
+                }
+            )
+
+    client, repo, _, headers = voice_env
+    monkeypatch.setattr(voice_routes, "AlibabaRealtime", SilentSpeech)
+    auth = headers()
+    session = create(client, auth)
+    with connect(client, session, auth) as ws:
+        ready = configure(ws)
+        ws.send_bytes(
+            encode_audio(b"\0\0" * 3200, ready["connection_id"], str(ZERO_UUID), 0, 0, kind=1)
+        )
+        assert read_until(ws, "transcript.final")[-1]["text"] == ""
+        assert read_until(ws, "transcript.review")[-1]["reason"] == "insufficient_audio"
+        event(ws, "ping")
+        events = read_until(ws, "pong")
+        assert not any(e["type"] == "input.accepted" for e in events)
+        event(ws, "session.close")
+        read_until(ws, "session.closed")
+    assert not repo.records
+
+
+@pytest.mark.parametrize(
+    "text", ["你好。", "C++ 的 1.5 版本怎么用？", "嗯，帮我查天气。", "停", "好的", "OK", "Hi"]
+)
 def test_punctuation_noise_is_ignored_before_meaningful_speech(voice_env, monkeypatch, text):
     import app.api.voice as voice_routes
 

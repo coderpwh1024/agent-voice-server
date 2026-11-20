@@ -12,13 +12,13 @@ from mcp.types import CallToolResult, Tool
 
 from app.core import settings
 from app.core.model_metrics import invoke_chat_model
-from app.services.amap_mcp import AmapMcpService
+from app.services.amap_mcp import AmapMcpPlaceholderKey, AmapMcpService
 from app.services.execution import progress
 
 logger = logging.getLogger(__name__)
 
 _MAP_TOOL_DESCRIPTIONS = {
-    "maps_weather": "查询指定城市的实时天气和天气预报。",
+    "maps_weather": "按城市名称或行政区划编码查询天气预报。",
     "maps_text_search": "按关键词和城市查找地点。",
     "maps_around_search": "按坐标查找附近地点。仅使用本轮用户指定的地点、坐标或手机提供的当前位置。",
     "maps_search_detail": "查询指定地点的详细信息。",
@@ -26,6 +26,7 @@ _MAP_TOOL_DESCRIPTIONS = {
     "maps_regeocode": "将本轮用户或手机提供的坐标转换成地址。",
     "maps_direction_driving": "规划驾车路线。",
     "maps_direction_walking": "规划步行路线。",
+    "maps_bicycling": "规划骑行路线。",
     "maps_direction_bicycling": "规划骑行路线。",
     "maps_direction_transit_integrated": "规划公共交通路线。",
     "maps_distance": "查询两个地点之间的距离。",
@@ -37,11 +38,12 @@ _COORDINATE_DESCRIPTION = (
 _COORDINATE_FIELDS = {
     "maps_direction_driving": ("origin", "destination"),
     "maps_direction_walking": ("origin", "destination"),
+    "maps_bicycling": ("origin", "destination"),
     "maps_direction_bicycling": ("origin", "destination"),
     "maps_direction_transit_integrated": ("origin", "destination"),
     "maps_around_search": ("location",),
     "maps_regeocode": ("location",),
-    "maps_distance": ("destination",),
+    "maps_distance": ("origin", "destination"),
 }
 _MAX_CALLS = 4
 _MAX_RESULT_CHARS = 8000
@@ -136,7 +138,9 @@ async def answer_amap(
                     cursor = page.next_cursor
                     if cursor is None:
                         break
+                logger.info("Amap MCP tool discovery complete allowed_tools=%s", len(available))
                 if not available:
+                    logger.error("Amap MCP returned no supported tools")
                     await progress("map.lookup", "查询高德地图", "failed", "没有可用的地图工具")
                     return _reply("高德地图目前没有可用的查询工具，请稍后再试。", "unavailable")
 
@@ -186,7 +190,9 @@ async def answer_amap(
                         )
                     )
                     for tool_call, result in zip(decision.tool_calls, results, strict=True):
+                        tool_name = tool_call["name"]
                         if _daily_quota_exceeded(result):
+                            logger.error("Amap MCP daily quota exceeded tool=%s", tool_name)
                             await progress(
                                 "map.lookup", "查询高德地图", "failed", "地图账号查询配额已用尽"
                             )
@@ -196,10 +202,17 @@ async def answer_amap(
                             )
                         content = _result_text(result)
                         if result.is_error or content is None:
+                            logger.error(
+                                "Amap MCP tool failed tool=%s provider_error=%s empty_result=%s",
+                                tool_name,
+                                result.is_error,
+                                content is None,
+                            )
                             await progress(
                                 "map.lookup", "查询高德地图", "failed", "地图服务没有返回结果"
                             )
                             return _reply("高德地图查询失败，请稍后再试。", "unavailable")
+                        logger.info("Amap MCP tool succeeded tool=%s", tool_name)
                         messages.append(ToolMessage(content=content, tool_call_id=tool_call["id"]))
                     tool_count += len(decision.tool_calls)
                     if tool_count == _MAX_CALLS:
@@ -211,10 +224,17 @@ async def answer_amap(
                 final.response_metadata["map_status"] = "succeeded"
                 await progress("map.lookup", "查询高德地图", "succeeded")
                 return final
+    except AmapMcpPlaceholderKey:
+        logger.error("Amap MCP key is still a placeholder in Nacos")
+        await progress("map.lookup", "查询高德地图", "failed", "地图服务密钥尚未配置")
+        return _reply("高德地图尚未配置有效密钥，请联系管理员。", "unavailable")
     except TimeoutError:
+        logger.error(
+            "Amap MCP query timed out timeout_seconds=%s", settings.AMAP_MCP_TIMEOUT_SECONDS
+        )
         await progress("map.lookup", "查询高德地图", "failed", "地图查询超时")
         return _reply("高德地图查询超时，请稍后再试。", "timeout")
     except Exception as exc:
-        logger.warning("Amap MCP failed error_type=%s", type(exc).__name__)
+        logger.error("Amap MCP failed error_type=%s", type(exc).__name__)
         await progress("map.lookup", "查询高德地图", "failed", "地图服务暂时不可用")
         return _reply("高德地图暂时不可用，请稍后再试。", "unavailable")

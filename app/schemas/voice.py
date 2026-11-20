@@ -96,6 +96,24 @@ class AudioQualitySummary(BaseModel):
         return self.rms_dbfs_sum / self.reports if self.reports else None
 
 
+class SpeechEvidence(BaseModel):
+    duration_ms: float = Field(ge=0)
+    active_ms: float | None = Field(default=None, ge=0)
+
+
+class VoiceInputDecision(BaseModel):
+    action: Literal["accept", "ignore", "review"]
+    reason: (
+        Literal["non_speech", "uncertain_text", "insufficient_audio", "possible_echo"] | None
+    ) = None
+
+
+class VoiceTranscriptReview(BaseModel):
+    input_id: str = Field(min_length=1, max_length=256)
+    text: str = Field(min_length=1, max_length=6000)
+    reason: Literal["uncertain_text", "insufficient_audio", "possible_echo"]
+
+
 class VoiceSession(BaseModel):
     agent_id: str = "chatbot"
     memory_mode: Literal["mem0", "local"] = "mem0"

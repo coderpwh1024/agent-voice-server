@@ -74,6 +74,23 @@ def test_settings_default_values():
     assert settings.VOICE_WAKE_KWS_THRESHOLD == 0.25
 
 
+def test_voice_input_filter_defaults_and_configuration_bounds():
+    config = Settings(_env_file=None)
+    assert config.VOICE_ASR_VAD_MODEL == "near_meeting_16k"
+    assert config.VOICE_INPUT_MIN_SPEECH_MS == 120
+    assert config.VOICE_INPUT_MIN_ACTIVE_MS == 80
+    assert config.VOICE_INPUT_RMS_DBFS == -55
+    for fields in [
+        {"VOICE_ASR_VAD_MODEL": "invalid"},
+        {"VOICE_INPUT_MIN_SPEECH_MS": -1},
+        {"VOICE_INPUT_MIN_ACTIVE_MS": 1001},
+        {"VOICE_INPUT_RMS_DBFS": -120},
+        {"VOICE_VAD_THRESHOLD": 1.1},
+    ]:
+        with pytest.raises(ValidationError):
+            Settings(_env_file=None, **fields)
+
+
 @pytest.mark.parametrize("keyword", ["小美", "小美小美", "小美，小美", "小美， 小美。"])
 def test_wake_word_configuration_accepts_legacy_and_punctuated_phrases(keyword):
     config = Settings(_env_file=None, VOICE_WAKE_WORD=keyword)

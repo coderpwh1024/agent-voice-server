@@ -492,6 +492,20 @@ def test_nacos_voice_catalog_and_protocol_overrides_are_applied() -> None:
     assert voice_options(config)[0].languages == ["zh"]
 
 
+def test_nacos_voice_noise_and_input_filter_settings_are_validated() -> None:
+    config = make_settings()
+    nacos.apply_remote_settings(
+        config,
+        "voice:\n  vad:\n    threshold: 0.35\n    model: far_field_meeting_16k\n"
+        "  input_filter:\n    min_speech_ms: 100\n    min_active_ms: 60\n    rms_dbfs: -60\n",
+    )
+    assert config.VOICE_VAD_THRESHOLD == 0.35
+    assert config.VOICE_ASR_VAD_MODEL == "far_field_meeting_16k"
+    assert config.VOICE_INPUT_MIN_SPEECH_MS == 100
+    assert config.VOICE_INPUT_MIN_ACTIVE_MS == 60
+    assert config.VOICE_INPUT_RMS_DBFS == -60
+
+
 def test_nested_nacos_config_maps_sections_to_settings() -> None:
     config = make_settings()
 
@@ -1070,39 +1084,6 @@ def test_bailian_search_defaults_on_and_maps_from_nacos():
     assert config.DASHSCOPE_ENABLE_SEARCH is False
 
 
-def test_amap_mcp_loads_from_nacos_and_requires_bailian_key():
-    config = make_settings(NACOS_ENABLED=True, DASHSCOPE_API_KEY=SecretStr("test-key"))
-    url = "https://llm-example.cn-beijing.maas.aliyuncs.com/api/v1/mcps/amap-maps/mcp"
-    updated = nacos.apply_remote_settings(
-        config,
-        f"mcp:\n  amap_maps:\n    enabled: true\n    url: {url}\n    timeout_seconds: 12\n",
-    )
-    assert updated == ["AMAP_MCP_ENABLED", "AMAP_MCP_TIMEOUT_SECONDS", "AMAP_MCP_URL"]
-    assert config.AMAP_MCP_ENABLED is True
-    assert config.AMAP_MCP_URL == url
-    assert config.AMAP_MCP_TIMEOUT_SECONDS == 12
-
-    for invalid_url in (
-        "http://llm-example.cn-beijing.maas.aliyuncs.com/api/v1/mcps/amap-maps/mcp",
-        "https://example.com/api/v1/mcps/amap-maps/mcp",
-        f"{url}?token=secret",
-    ):
-        with pytest.raises(ValueError, match="AMAP_MCP_URL"):
-            nacos.apply_remote_settings(config, f"mcp:\n  amap_maps:\n    url: {invalid_url}\n")
-
-    with pytest.raises(ValueError, match="DASHSCOPE_API_KEY"):
-        nacos.apply_remote_settings(
-            make_settings(NACOS_ENABLED=True, DASHSCOPE_API_KEY=None),
-            f"mcp:\n  amap_maps:\n    enabled: true\n    url: {url}\n",
-        )
-
-    with pytest.raises(ValueError, match="through Nacos"):
-        nacos.apply_remote_settings(
-            make_settings(DASHSCOPE_API_KEY=SecretStr("test-key")),
-            f"mcp:\n  amap_maps:\n    enabled: true\n    url: {url}\n",
-        )
-
-
 def test_http_chat_thinking_default_maps_from_nacos():
     config = make_settings()
     assert config.CHAT_LLM_ENABLE_THINKING is False
@@ -1110,51 +1091,92 @@ def test_http_chat_thinking_default_maps_from_nacos():
     assert config.CHAT_LLM_ENABLE_THINKING is True
 
 
-def test_amap_mcp_accepts_an_independent_bailian_key_from_nacos():
+def test_amap_mcp_uses_only_url_and_key_from_nacos():
     config = make_settings(NACOS_ENABLED=True, DASHSCOPE_API_KEY=None)
     updated = nacos.apply_remote_settings(
         config,
         """mcp:
   amap_maps:
-    enabled: true
-    url: https://dashscope.aliyuncs.com/api/v1/mcps/amap-maps/mcp
-    api_key: dedicated-test-key
+    url: https://mcp.amap.com/mcp
+    key: XXXXXXX
 """,
     )
-    assert "AMAP_MCP_API_KEY" in updated
-    assert config.AMAP_MCP_API_KEY == SecretStr("dedicated-test-key")
-    assert config.DASHSCOPE_API_KEY is None
-    assert "dedicated-test-key" not in repr(config)
+    assert updated == ["AMAP_MAPS_API_KEY", "AMAP_MCP_ENABLED", "AMAP_MCP_URL"]
+    assert config.AMAP_MCP_ENABLED is True
+    assert config.AMAP_MCP_URL == "https://mcp.amap.com/mcp"
+    assert config.AMAP_MAPS_API_KEY == SecretStr("XXXXXXX")
+    assert config.AMAP_MCP_TIMEOUT_SECONDS == 20
+    assert "XXXXXXX" not in repr(config)
 
 
-def test_amap_empty_dedicated_key_does_not_fall_back_to_the_chat_account():
-    config = make_settings(NACOS_ENABLED=True, DASHSCOPE_API_KEY=SecretStr("chat-test-key"))
-    with pytest.raises(ValueError, match="AMAP_MCP_API_KEY"):
+@pytest.mark.parametrize("enabled", [True, False])
+def test_amap_mcp_accepts_previous_official_settings(enabled):
+    config = make_settings(NACOS_ENABLED=True)
+    nacos.apply_remote_settings(
+        config,
+        f"""mcp:
+  amap_maps:
+    enabled: {str(enabled).lower()}
+    url: https://mcp.amap.com/mcp
+    provider_api_key: amap-provider-test-key
+    timeout_seconds: 12
+""",
+    )
+    assert config.AMAP_MCP_ENABLED is enabled
+    assert config.AMAP_MAPS_API_KEY == SecretStr("amap-provider-test-key")
+    assert config.AMAP_MCP_TIMEOUT_SECONDS == 12
+
+
+def test_amap_mcp_rejects_conflicting_key_aliases_without_leaking_values():
+    config = make_settings(NACOS_ENABLED=True)
+    with pytest.raises(ValueError, match="amap_maps.*AMAP_MAPS_API_KEY") as error:
         nacos.apply_remote_settings(
             config,
-            """mcp:
-  amap_maps:
-    enabled: true
-    url: https://dashscope.aliyuncs.com/api/v1/mcps/amap-maps/mcp
-    api_key: ' '
-""",
+            "mcp:\n  amap_maps:\n    url: https://mcp.amap.com/mcp\n"
+            "    key: current-test-secret\n    provider_api_key: prior-test-secret\n",
+        )
+    assert "test-secret" not in str(error.value)
+    assert config.AMAP_MAPS_API_KEY is None
+
+
+@pytest.mark.parametrize(
+    "invalid_url",
+    [
+        "http://mcp.amap.com/mcp",
+        "https://mcp.amap.com/sse",
+        "https://mcp.amap.com.example.com/mcp",
+        "https://dashscope.aliyuncs.com/api/v1/mcps/amap-maps/mcp",
+        "https://mcp.amap.com/mcp?key=secret-not-for-logs",
+    ],
+)
+def test_amap_mcp_rejects_other_endpoints_without_leaking_values(invalid_url):
+    config = make_settings(NACOS_ENABLED=True)
+    with pytest.raises(ValueError, match="AMAP_MCP_URL") as error:
+        nacos.apply_remote_settings(config, f"mcp:\n  amap_maps:\n    url: {invalid_url}\n")
+    assert invalid_url not in str(error.value)
+    assert config.AMAP_MCP_URL is None
+
+
+def test_amap_mcp_requires_nacos_when_enabled():
+    with pytest.raises(ValueError, match="through Nacos"):
+        nacos.apply_remote_settings(
+            make_settings(NACOS_ENABLED=False),
+            "mcp:\n  amap_maps:\n    url: https://mcp.amap.com/mcp\n    key: XXXXXXX\n",
+        )
+
+
+@pytest.mark.parametrize("provider_key", ["", "    key: ' '\n"])
+def test_amap_mcp_requires_its_own_key_when_enabled(provider_key):
+    config = make_settings(NACOS_ENABLED=True, DASHSCOPE_API_KEY=SecretStr("chat-test-key"))
+    with pytest.raises(ValueError, match="AMAP_MAPS_API_KEY"):
+        nacos.apply_remote_settings(
+            config,
+            "mcp:\n  amap_maps:\n    url: https://mcp.amap.com/mcp\n" + provider_key,
         )
     assert config.AMAP_MCP_ENABLED is False
 
 
-def test_amap_provider_key_is_loaded_separately_from_bailian_authentication():
+def test_amap_mcp_rejects_the_retired_bailian_key_field():
     config = make_settings(NACOS_ENABLED=True)
-    updated = nacos.apply_remote_settings(
-        config,
-        """mcp:
-  amap_maps:
-    enabled: true
-    url: https://llm-example.cn-beijing.maas.aliyuncs.com/api/v1/mcps/amap-maps/mcp
-    api_key: bailian-test-key
-    provider_api_key: amap-provider-test-key
-""",
-    )
-    assert "AMAP_MAPS_API_KEY" in updated
-    assert config.AMAP_MAPS_API_KEY == SecretStr("amap-provider-test-key")
-    assert config.AMAP_MCP_API_KEY == SecretStr("bailian-test-key")
-    assert "amap-provider-test-key" not in repr(config)
+    with pytest.raises(ValueError, match="amap_maps.*api_key"):
+        nacos.apply_remote_settings(config, "mcp:\n  amap_maps:\n    api_key: bailian-test-key\n")
