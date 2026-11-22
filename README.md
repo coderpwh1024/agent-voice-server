@@ -13,7 +13,7 @@ cd agent-voice-server
 
 项目原名为 `agent-service-toolkit`。为兼容现有部署，Nacos 的 `agent-service-toolkit.yaml` Data ID、服务注册名、缓存目录和 PostgreSQL application name 继续使用原值；登录令牌的签发者与受众也保持原协议，无需迁移配置中心或重新登录。Compose 显式保留原项目名 `agent-service-toolkit`，继续使用现有 PostgreSQL、Redis 数据卷；已有 `-p` 或 `COMPOSE_PROJECT_NAME` 配置仍优先。新生成的部署包与安装目录示例使用 `agent-voice-server`，systemd 单元名和服务账号沿用原值；已有 Linux 部署升级前需按实际安装路径调整单元文件。
 
-项目只运行一个 Mem0 主 Agent，内部实现为 `mem0_chat`，现有对外标识 `mem0-chatbot` 保持不变。它负责日常对话、用户长期记忆、邮件 Skill、视频 Skill 和按需加载的高德地图 MCP 查询；研究、RAG、Supervisor、GitHub MCP 及 `chatbot` 的独立实现和注册均已移除。旧 `chatbot` 请求值只在 API 边界解析到主 Agent，已有 App 无需修改 URL 或参数。
+项目只运行一个 Mem0 主 Agent，内部实现为 `mem0_chat`，现有对外标识 `mem0-chatbot` 保持不变。它负责日常对话、用户长期记忆、邮件 Skill、视频 Skill、语音图像生成与编辑，以及按需加载的高德地图 MCP 查询；研究、RAG、Supervisor、GitHub MCP 及 `chatbot` 的独立实现和注册均已移除。旧 `chatbot` 请求值只在 API 边界解析到主 Agent，已有 App 无需修改 URL 或参数。
 
 兼容新版 Flutter App 的首选记忆方案为手机端 `MEMORY.md`：App 按需提供相关片段，服务端只返回候选，由手机检查版本并写回。原 Mem0 代码、管理接口和旧客户端行为保留为备选。存储位置、开关、协议、遗忘与隐私边界见[手机端 Markdown 记忆](docs/local-memory.md)。
 
@@ -87,11 +87,11 @@ streamlit_app.py         开发聊天界面
 | `app/__main__.py` | Uvicorn 启动与日志配置 |
 | `app/main.py`、`app/lifecycle.py` | FastAPI 组装、统一异常处理注册与共享资源生命周期 |
 | `app/api/chats.py`、`app/services/chat.py` | 对话路由、SSE 封装与模型运行配置、调用服务 |
-| `app/api/` | 按业务划分的认证、用户、语音、记忆、邮件、视频、文件、AG-UI 路由 |
+| `app/api/` | 按业务划分的认证、用户、语音、记忆、邮件、视频、图像、文件、AG-UI 路由 |
 | `app/api/dependencies.py`、`app/api/errors.py` | 认证依赖、旧请求值兼容与业务异常到 HTTP 的映射 |
 | `app/services/auth.py`、`app/services/email_auth.py`、`app/services/users.py` | 令牌与线程授权、验证码登录、用户资料业务 |
-| `app/repositories/` | 用户、文件、视频、语音、验证码和 Mem0 审计数据访问 |
-| `app/models/` | 视频持久化记录和 `sql/` 中原有四份数据库定义，继续使用 psycopg |
+| `app/repositories/` | 用户、文件、视频、图像、语音、验证码和 Mem0 审计数据访问 |
+| `app/models/` | 持久化记录及 `sql/` 中的 PostgreSQL 数据库定义 |
 | `app/schemas/` | Pydantic 请求、响应、语音事件与业务数据契约 |
 | `app/agents/mem0_chat.py` | 唯一主 Agent；历史、记忆与业务分流 |
 | `app/agents/chat.py`、`app/agents/amap_chat.py` | 主模型调用、提示词上下文与视频 / 地图技能加载 |
@@ -100,10 +100,11 @@ streamlit_app.py         开发聊天界面
 | `app/api/voice_connection.py`、`app/services/voice/` | WebSocket 会话、ASR/TTS 供应商、断句与播放协调 |
 | `app/services/memory/`、`app/core/database.py` | Mem0 SDK、长期记忆服务、PostgreSQL 检查点与 Store |
 | `app/services/video/` | 视频生成、编辑、异步状态同步与七牛归档 |
+| `app/services/image/` | 千问图像生成与编辑、异步队列和七牛归档 |
 | `app/core/` | Settings、模型工厂、日志、模型调用指标与 Skill 定义 |
 | `client/`、`streamlit_app.py` | Python 客户端与开发聊天界面 |
 
-服务启动先加载 Nacos 配置，再初始化 PostgreSQL、主 Agent、Mem0、邮箱认证、邮件调度、语音、视频和文件服务；退出时释放连接并取消后台任务。PostgreSQL 不可用时启动失败，不回退到其他存储。
+服务启动先加载 Nacos 配置，再初始化 PostgreSQL、主 Agent、Mem0、邮箱认证、邮件调度、语音、视频、文件和图像服务。退出时释放连接并取消后台任务。PostgreSQL 不可用时启动失败。
 
 ## App 接口与兼容性
 
@@ -116,6 +117,7 @@ streamlit_app.py         开发聊天界面
 | 实时语音 | `/voice/capabilities`、`/voice/protocol`、`/voice/sessions` 与会话 WebSocket |
 | 邮件 Skill | `POST /skills/email/send` 与主 Agent 的文字 / 语音调用 |
 | 视频制作与管理 | `/videos` 现有创建、列表、详情、修改、删除接口与视频 Skill |
+| 图像工作室 | `/images` 创建、编辑、列表、详情、改名、逻辑删除与语音入口，见[图像服务](docs/image-generation.md) |
 | 文件与记忆 | `/files`、`/memories` 现有接口 |
 | AG-UI | `POST /agui/run`、`POST /agui/{agent_id}/run` |
 

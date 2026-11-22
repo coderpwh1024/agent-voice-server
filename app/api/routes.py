@@ -8,6 +8,7 @@ from app.api import (
     email_skill,
     files,
     health,
+    image,
     local_memories,
     memories,
     users,
@@ -50,6 +51,9 @@ protected.include_router(email_skill.router)
 
 
 protected.include_router(video.router)
+
+
+protected.include_router(image.router)
 
 
 protected.include_router(files.router)

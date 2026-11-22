@@ -20,6 +20,7 @@ from app.schemas.memory_commands import MemoryDialogue
 from app.services.execution import ExecutionTrace, confirmation_id, progress
 from app.services.memory.local_context import device_memory
 from app.services.memory.mem0_service import Mem0Service, get_mem0_service
+from app.services.skills.image_voice import ImageVoiceSession
 from app.services.skills.video_chat import VideoSkillSession
 
 logger = logging.getLogger(__name__)
@@ -33,6 +34,7 @@ class Mem0ChatState(TypedDict):
     memory_dialogue: NotRequired[dict[str, Any]]
     email_dialogue: NotRequired[dict[str, Any] | None]
     video_dialogue: NotRequired[dict[str, Any] | None]
+    image_dialogue: NotRequired[dict[str, str | int] | None]
     local_memory_epoch: NotRequired[int]
     local_memory_context_start: NotRequired[int]
 
@@ -137,6 +139,7 @@ async def _mem0_chat(
     ]
     messages = (previous["messages"] if previous else []) + new_messages
     video_dialogue = previous.get("video_dialogue") if previous else None
+    image_dialogue = previous.get("image_dialogue") if previous else None
     local = device_memory(user_id, thread_id)
     memory = None if local is not None else get_mem0_service()
     dialogue = MemoryDialogue(user_id=user_id)
@@ -160,10 +163,11 @@ async def _mem0_chat(
         else settings.CHAT_LLM_ENABLE_THINKING,
     )
     if user_messages:
+        human = next(
+            message for message in reversed(new_messages) if isinstance(message, HumanMessage)
+        )
         email_response, email_dialogue = await handle_email_command(
-            next(
-                message for message in reversed(new_messages) if isinstance(message, HumanMessage)
-            ),
+            human,
             previous.get("email_dialogue") if previous else None,
             model,
             config,
@@ -176,6 +180,20 @@ async def _mem0_chat(
                     "memory_dialogue": dialogue.model_dump(mode="json"),
                     "email_dialogue": email_dialogue,
                     "video_dialogue": video_dialogue,
+                    "image_dialogue": image_dialogue,
+                },
+            )
+        image = ImageVoiceSession(human, image_dialogue, get_stream_writer())
+        image_response = await image.answer(model, config)
+        if image_response is not None:
+            return entrypoint.final(
+                value={"messages": [image_response]},
+                save={
+                    "messages": messages + [image_response],
+                    "memory_dialogue": dialogue.model_dump(mode="json"),
+                    "email_dialogue": email_dialogue,
+                    "video_dialogue": video_dialogue,
+                    "image_dialogue": image.saved,
                 },
             )
         command_response = (
@@ -197,6 +215,7 @@ async def _mem0_chat(
                     "messages": messages + [command_response],
                     "memory_dialogue": dialogue.model_dump(mode="json"),
                     "video_dialogue": video_dialogue,
+                    "image_dialogue": image_dialogue,
                 },
             )
     logger.info("Mem0 chatbot started memory_enabled=%s", memory is not None)
@@ -269,6 +288,7 @@ async def _mem0_chat(
                 "messages": messages + [response],
                 "memory_dialogue": dialogue.model_dump(mode="json"),
                 "video_dialogue": video_dialogue,
+                "image_dialogue": image_dialogue,
             },
         )
     if memory and user_messages:
@@ -300,6 +320,7 @@ async def _mem0_chat(
             "messages": messages + [response],
             "memory_dialogue": dialogue.model_dump(mode="json"),
             "video_dialogue": video_dialogue,
+            "image_dialogue": image_dialogue,
         },
     )
 

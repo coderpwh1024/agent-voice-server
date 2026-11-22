@@ -14,12 +14,16 @@ from app.core.database import get_postgres_connection_string
 from app.core.nacos import NacosIntegration
 from app.core.persistence import initialize_database, initialize_store
 from app.repositories.files import FileRepository
+from app.repositories.image import ImageRepository
 from app.repositories.users import UserRepository
 from app.repositories.verification_codes import AsyncRedisProtocol, VerificationCodeStore
 from app.repositories.video import VideoRepository
 from app.repositories.voice import VoiceRepository
 from app.services.email_auth import EmailAuthService, SMTPEmailSender
 from app.services.files import FileService, QiniuFileStorage
+from app.services.image.providers import QiniuImageStorage, QwenImageClient
+from app.services.image.runtime import set_image_service
+from app.services.image.service import ImageService
 from app.services.memory.mem0_service import mem0_lifespan
 from app.services.skills.email import EmailSkillService, set_email_skill_service
 from app.services.users import QiniuAvatarStorage, UserProfileService
@@ -60,9 +64,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 mem0_lifespan(),
                 email_auth_lifespan(app),
                 email_skill_lifespan(app),
-                voice_lifespan(app),
                 video_lifespan(app),
                 file_lifespan(app),
+                image_lifespan(app),
+                voice_lifespan(app),
             ):
                 await nacos.register_service()
                 app.state.nacos = nacos
@@ -171,6 +176,46 @@ async def file_lifespan(app: FastAPI) -> AsyncIterator[None]:
     finally:
         app.state.file_service = None
         await repo.close()
+
+
+@asynccontextmanager
+async def image_lifespan(app: FastAPI) -> AsyncIterator[None]:
+    app.state.image_service = None
+    set_image_service(None)
+    if not settings.IMAGE_ENABLED:
+        yield
+        return
+    settings.require_image_configuration()
+    storage = QiniuFileStorage(settings, secure_transport=True)
+    repo = ImageRepository(get_postgres_connection_string())
+    worker: asyncio.Task[None] | None = None
+    async with httpx.AsyncClient(
+        timeout=httpx.Timeout(20, connect=5), follow_redirects=False
+    ) as client:
+        try:
+            await repo.open()
+            service = ImageService(
+                repo,
+                QwenImageClient(client, settings),
+                QiniuImageStorage(client, storage),
+                app.state.file_service,
+                settings,
+            )
+            app.state.image_service = service
+            set_image_service(service)
+            worker = asyncio.create_task(service.run(), name="image-queue")
+            logger.info("图像任务队列已启动 model=%s", settings.IMAGE_MODEL)
+            yield
+        finally:
+            app.state.image_service = None
+            set_image_service(None)
+            try:
+                if worker is not None:
+                    worker.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await worker
+            finally:
+                await repo.close()
 
 
 @asynccontextmanager

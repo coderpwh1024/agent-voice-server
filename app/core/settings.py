@@ -23,6 +23,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.core.skills import EmailSkill, SkillDefinition
 from app.core.speech import validate_speech_configuration
+from app.schemas.image import ImageModel
 from app.schemas.llm import (
     AlibabaModelName,
     AllModelEnum,
@@ -322,6 +323,37 @@ class Settings(BaseSettings):
     QINIU_AVATAR_MAX_BYTES: int = Field(default=5 * 1024 * 1024, ge=1024, le=20 * 1024 * 1024)
     FILE_UPLOAD_ENABLED: bool = False
     FILE_UPLOAD_MAX_BYTES: int = Field(default=20 * 1024 * 1024, ge=1, le=100 * 1024 * 1024)
+
+    IMAGE_ENABLED: bool = False
+    IMAGE_API_BASE_URL: str = "https://dashscope.aliyuncs.com/api/v1"
+    IMAGE_API_KEY: SecretStr | None = None
+    IMAGE_MODEL: ImageModel = "qwen-image-3.0"
+    IMAGE_MAX_ACTIVE_TASKS: int = Field(default=4, ge=1, le=32)
+    IMAGE_MAX_ACTIVE_TASKS_PER_USER: int = Field(default=2, ge=1, le=10)
+
+    def require_image_configuration(self) -> None:
+        if self.APP_TOKEN_SECRET is None or len(self.APP_TOKEN_SECRET.get_secret_value()) < 32:
+            raise ValueError("图像功能要求 APP_TOKEN_SECRET 至少包含 32 个字符")
+        if not (self.IMAGE_API_KEY or self.DASHSCOPE_API_KEY):
+            raise ValueError("图像功能缺少百炼 API Key")
+        endpoint = urlsplit(self.IMAGE_API_BASE_URL)
+        hostname = endpoint.hostname or ""
+        supported_host = hostname in {
+            "dashscope.aliyuncs.com",
+            "dashscope-intl.aliyuncs.com",
+            "dashscope-us.aliyuncs.com",
+        } or hostname.endswith(".maas.aliyuncs.com")
+        if (
+            endpoint.scheme != "https"
+            or not supported_host
+            or endpoint.username is not None
+            or endpoint.password is not None
+            or endpoint.query
+            or endpoint.fragment
+            or endpoint.path.rstrip("/") != "/api/v1"
+            or endpoint.port not in (None, 443)
+        ):
+            raise ValueError("IMAGE_API_BASE_URL 必须是百炼 HTTPS /api/v1 地址")
 
     VIDEO_ENABLED: bool = False
     VIDEO_API_BASE_URL: str = "https://dashscope.aliyuncs.com/api/v1"

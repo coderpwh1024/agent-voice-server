@@ -83,6 +83,11 @@ _REALTIME_MODEL_SETTINGS = {
 
 
 _NESTED_SETTINGS: dict[str, Any] = {
+    "image": {
+        "enabled": "IMAGE_ENABLED",
+        "max_active_tasks": "IMAGE_MAX_ACTIVE_TASKS",
+        "max_active_tasks_per_user": "IMAGE_MAX_ACTIVE_TASKS_PER_USER",
+    },
     "video": {
         "enabled": "VIDEO_ENABLED",
         "api_base_url": "VIDEO_API_BASE_URL",
@@ -141,6 +146,11 @@ _NESTED_SETTINGS: dict[str, Any] = {
             "memory": _MEM0_MODEL_SETTINGS,
             "realtime": _REALTIME_MODEL_SETTINGS,
             "video": {"api_base_url": "VIDEO_API_BASE_URL"},
+            "image": {
+                "api_base_url": "IMAGE_API_BASE_URL",
+                "api_key": "IMAGE_API_KEY",
+                "model": "IMAGE_MODEL",
+            },
         },
     },
     "mcp": {

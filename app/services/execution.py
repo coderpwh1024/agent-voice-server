@@ -17,7 +17,7 @@ from langgraph.store.base import BaseStore
 from langgraph.types import StreamWriter
 
 from app.schemas.events import CustomData
-from app.schemas.execution import ExecutionSnapshot, ExecutionStatus, ExecutionStep
+from app.schemas.execution import ExecutionImage, ExecutionSnapshot, ExecutionStatus, ExecutionStep
 from app.schemas.memory_commands import PendingMemoryCommand
 from app.services.messages import convert_message_content_to_string
 
@@ -125,6 +125,7 @@ class ExecutionTrace:
         outcome: ExecutionStatus = "succeeded"
         business_status = (
             metadata.get("video_status")
+            or metadata.get("image_status")
             or metadata.get("map_status")
             or metadata.get("email_status")
             or metadata.get("memory_status")
@@ -160,6 +161,8 @@ class ExecutionTrace:
             "expired",
         }:
             outcome = "failed"
+        if metadata.get("image_status") == "failed":
+            outcome = "failed"
         if business_status == "unavailable" and any(
             step.stage == "video.submit" for step in self.snapshot.steps
         ):
@@ -181,6 +184,9 @@ class ExecutionTrace:
         self.snapshot.status = outcome
         self.snapshot.text = convert_message_content_to_string(response.content)
         self.snapshot.video = metadata.get("video")
+        image = metadata.get("image")
+        if metadata.get("image_status") and isinstance(image, dict):
+            self.snapshot.image = ExecutionImage.model_validate(image)
         if response.id:
             self.snapshot.message_id = response.id
         else:
@@ -195,7 +201,13 @@ class ExecutionTrace:
                 step.status = (
                     "unknown"
                     if step.stage
-                    in {"email.submit", "video.submit", "memory.command", "memory.write"}
+                    in {
+                        "email.submit",
+                        "video.submit",
+                        "image.submit",
+                        "memory.command",
+                        "memory.write",
+                    }
                     else self.snapshot.status
                 )
                 step.duration_ms = int((monotonic() - self.started[step.step_id]) * 1000)

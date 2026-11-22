@@ -20,6 +20,30 @@ def test_file_upload_settings_map_from_nacos() -> None:
     assert config.FILE_UPLOAD_MAX_BYTES == 1048576
 
 
+def test_image_settings_follow_nacos_provider_and_feature_sections() -> None:
+    config = nacos.Settings(_env_file=None, USE_FAKE_MODEL=True)
+    nacos.apply_remote_settings(
+        config,
+        """image:
+  enabled: true
+  max_active_tasks: 3
+  max_active_tasks_per_user: 1
+models:
+  dashscope:
+    image:
+      api_base_url: https://workspace-example.cn-beijing.maas.aliyuncs.com/api/v1
+      api_key: example-image-key
+      model: qwen-image-3.0-pro
+""",
+    )
+    assert config.IMAGE_ENABLED is True
+    assert config.IMAGE_MAX_ACTIVE_TASKS == 3
+    assert config.IMAGE_MAX_ACTIVE_TASKS_PER_USER == 1
+    assert config.IMAGE_MODEL == "qwen-image-3.0-pro"
+    assert config.IMAGE_API_BASE_URL.endswith("cn-beijing.maas.aliyuncs.com/api/v1")
+    assert config.IMAGE_API_KEY == SecretStr("example-image-key")
+
+
 def test_device_memory_settings_map_independently_of_mem0() -> None:
     config = nacos.Settings(_env_file=None, USE_FAKE_MODEL=True)
     nacos.apply_remote_settings(

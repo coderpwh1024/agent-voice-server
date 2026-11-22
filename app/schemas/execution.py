@@ -40,6 +40,15 @@ class ExecutionStep(BaseModel):
     duration_ms: int | None = Field(default=None, ge=0)
 
 
+class ExecutionImage(BaseModel):
+    id: int
+    title: str
+    status: str
+    image_url: str | None = None
+    source_image_id: int | None = None
+    error_code: str | None = None
+
+
 class ExecutionSnapshot(BaseModel):
     type: Literal["execution.progress"] = "execution.progress"
     version: Literal[1] = 1
@@ -54,6 +63,7 @@ class ExecutionSnapshot(BaseModel):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     text: str = ""
     video: dict[str, Any] | None = None
+    image: ExecutionImage | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class ExecutionList(BaseModel):

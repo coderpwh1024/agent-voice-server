@@ -10,6 +10,7 @@ from uuid import uuid4
 from psycopg import InterfaceError, OperationalError
 from pydantic import HttpUrl
 from qiniu import Auth, BucketManager, put_data
+from qiniu.services.storage.uploaders import FormUploader
 
 from app.core.settings import Settings
 from app.core.uploads import UploadContent
@@ -39,7 +40,7 @@ class FileStorage(Protocol):
 
 
 class QiniuFileStorage:
-    def __init__(self, config: Settings) -> None:
+    def __init__(self, config: Settings, *, secure_transport: bool = False) -> None:
         if not config.QINIU_ACCESS_KEY or not config.QINIU_SECRET_KEY:
             raise ValueError("Qiniu access and secret keys are required for file uploads")
         if not config.QINIU_BUCKET_NAME or not config.QINIU_PUBLIC_BASE_URL:
@@ -63,7 +64,11 @@ class QiniuFileStorage:
         self.base_url = str(HttpUrl(base_url)).rstrip("/")
         self.token_ttl_seconds = config.QINIU_UPLOAD_TOKEN_TTL_SECONDS
         self.max_bytes = config.FILE_UPLOAD_MAX_BYTES
-        self.manager = BucketManager(self.auth)
+        scheme = "https" if secure_transport else "http"
+        self.manager = BucketManager(self.auth, preferred_scheme=scheme)
+        self._secure_uploader = (
+            FormUploader(self.bucket_name, preferred_scheme=scheme) if secure_transport else None
+        )
 
     def _upload(self, object_key: str, data: bytes, content_type: str) -> None:
         token = self.auth.upload_token(
@@ -72,7 +77,14 @@ class QiniuFileStorage:
             self.token_ttl_seconds,
             policy={"insertOnly": 1, "fsizeLimit": self.max_bytes},
         )
-        result, response = put_data(token, object_key, data, mime_type=content_type, check_crc=True)
+        if self._secure_uploader is None:
+            result, response = put_data(
+                token, object_key, data, mime_type=content_type, check_crc=True
+            )
+        else:
+            result, response = self._secure_uploader.upload(
+                key=object_key, data=data, mime_type=content_type, up_token=token
+            )
         if (
             response.status_code != 200
             or not isinstance(result, dict)
