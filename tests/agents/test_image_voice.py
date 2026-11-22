@@ -1,4 +1,5 @@
 import importlib
+import json
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, Mock
 
@@ -6,11 +7,14 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.memory import MemorySaver
 
+from app.core import settings as app_settings
+from app.core.skills import IMAGE_SKILL_NAME, SkillDefinition
 from app.models.image import ImageEditLimitError
 from app.schemas.image import ImageStatus, ImageTask
 from app.services.skills import image_voice
 
 agent_module = importlib.import_module("app.agents.mem0_chat")
+SKILL_REFERENCE = "已发布图像工作流测试说明"
 
 
 def operation(action: str, **args: str | int) -> AIMessage:
@@ -63,6 +67,12 @@ def setup(monkeypatch):
     monkeypatch.setattr(agent_module, "get_model", lambda *_args, **_kwargs: model)
     monkeypatch.setattr(agent_module, "get_mem0_service", lambda: memory)
     monkeypatch.setattr(image_voice, "get_image_service", lambda: service)
+    monkeypatch.setattr(app_settings, "IMAGE_SKILL_ENABLED", True)
+    monkeypatch.setattr(
+        app_settings,
+        "_image_skill",
+        SkillDefinition(IMAGE_SKILL_NAME, "语音生成图像", SKILL_REFERENCE, "a" * 64),
+    )
     graph = agent_module.mem0_chat.copy()
     graph.checkpointer = MemorySaver()
     return graph, model, service, memory
@@ -92,7 +102,40 @@ async def test_voice_generation_is_idempotent_and_publishes_structured_task(setu
     assert service.create.await_args.args[0] == 7
     assert service.create.await_args.kwargs["voice_edit_limit"] == 5
     assert model.ainvoke.await_count == 2
+    reference = next(
+        message
+        for message in model.ainvoke.await_args.args[0]
+        if message.name == "image_skill_reference"
+    )
+    assert isinstance(reference, HumanMessage)
+    assert json.loads(reference.content) == {
+        "name": IMAGE_SKILL_NAME,
+        "instructions": SKILL_REFERENCE,
+    }
     memory.remember.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("enabled", [False, True])
+async def test_voice_image_requires_published_skill(setup, monkeypatch, enabled):
+    graph, model, service, _ = setup
+    monkeypatch.setattr(app_settings, "IMAGE_SKILL_ENABLED", enabled)
+    if enabled:
+        monkeypatch.setattr(app_settings, "_image_skill", None)
+    result = await graph.ainvoke(user_input("请生成一张图片，画一棵树"), config())
+    assert result["messages"][0].response_metadata["image_status"] == "unavailable"
+    model.ainvoke.assert_not_awaited()
+    service.create.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_non_image_voice_request_does_not_load_image_workflow(setup):
+    graph, model, service, _ = setup
+    await graph.ainvoke(user_input("你好"), config())
+    assert all(
+        message.name != "image_skill_reference" for message in model.ainvoke.await_args.args[0]
+    )
+    service.create.assert_not_awaited()
 
 
 @pytest.mark.asyncio

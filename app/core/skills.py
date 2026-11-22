@@ -14,6 +14,9 @@ EMAIL_SKILL_NAME = "send-current-user-email"
 VIDEO_SKILL_NAME = "manage-user-videos"
 
 
+IMAGE_SKILL_NAME = "manage-user-images"
+
+
 @dataclass(frozen=True)
 class SkillDefinition:
     name: str

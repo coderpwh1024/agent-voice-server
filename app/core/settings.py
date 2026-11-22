@@ -330,6 +330,19 @@ class Settings(BaseSettings):
     IMAGE_MODEL: ImageModel = "qwen-image-3.0"
     IMAGE_MAX_ACTIVE_TASKS: int = Field(default=4, ge=1, le=32)
     IMAGE_MAX_ACTIVE_TASKS_PER_USER: int = Field(default=2, ge=1, le=10)
+    IMAGE_SKILL_ENABLED: bool = False
+    IMAGE_SKILL_VERSION: str | None = Field(default=None, min_length=1)
+    IMAGE_SKILL_LABEL: str = Field(default="latest", min_length=1)
+    IMAGE_SKILL_TIMEOUT_SECONDS: float = Field(default=20, ge=1, le=120)
+    _image_skill: SkillDefinition | None = PrivateAttr(default=None)
+
+    @property
+    def image_skill(self) -> SkillDefinition | None:
+        return self._image_skill
+
+    @image_skill.setter
+    def image_skill(self, value: SkillDefinition | None) -> None:
+        self._image_skill = value
 
     def require_image_configuration(self) -> None:
         if self.APP_TOKEN_SECRET is None or len(self.APP_TOKEN_SECRET.get_secret_value()) < 32:

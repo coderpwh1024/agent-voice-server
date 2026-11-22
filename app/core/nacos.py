@@ -20,7 +20,14 @@ from v2.nacos.ai.model.ai_param import DownloadSkillParam, GetPromptParam
 from v2.nacos.ai.nacos_ai_service import NacosAIService
 
 from app.core.settings import Settings
-from app.core.skills import EMAIL_SKILL_NAME, VIDEO_SKILL_NAME, read_email_skill, read_skill
+from app.core.skills import (
+    EMAIL_SKILL_NAME,
+    IMAGE_SKILL_NAME,
+    VIDEO_SKILL_NAME,
+    SkillDefinition,
+    read_email_skill,
+    read_skill,
+)
 from app.schemas.prompts import Mem0Prompts
 
 logger = logging.getLogger(__name__)
@@ -93,6 +100,12 @@ _NESTED_SETTINGS: dict[str, Any] = {
         "api_base_url": "VIDEO_API_BASE_URL",
     },
     "skills": {
+        "image": {
+            "enabled": "IMAGE_SKILL_ENABLED",
+            "version": "IMAGE_SKILL_VERSION",
+            "label": "IMAGE_SKILL_LABEL",
+            "timeout_seconds": "IMAGE_SKILL_TIMEOUT_SECONDS",
+        },
         "video": {
             "enabled": "VIDEO_SKILL_ENABLED",
             "version": "VIDEO_SKILL_VERSION",
@@ -510,6 +523,8 @@ class NacosIntegration:
         if not self.config.NACOS_ENABLED:
             if self.config.VIDEO_SKILL_ENABLED:
                 raise ValueError("视频技能需要启用 Nacos Skill 管理")
+            if self.config.IMAGE_SKILL_ENABLED:
+                raise ValueError("图像技能需要启用 Nacos Skill 管理")
             return
         if not self.config.NACOS_CONFIG_DATA_ID:
             if self.config.NACOS_STORAGE_CONFIG_REQUIRED:
@@ -547,26 +562,22 @@ class NacosIntegration:
     async def load_remote_skills(self) -> None:
         self.config.email_skill = None
         self.config.video_skill = None
+        self.config.image_skill = None
         if self.config.VIDEO_SKILL_ENABLED:
             if not self.config.NACOS_ENABLED or not self.config.VIDEO_ENABLED:
                 raise ValueError("视频技能需要启用 Nacos 和视频服务")
-            if self.ai_client is None:
-                self.ai_client = await NacosAIService.create_ai_service(self._client_config())
-            archive = await self.ai_client.download_skill_zip(
-                DownloadSkillParam(
-                    skill_name=VIDEO_SKILL_NAME,
-                    version=self.config.VIDEO_SKILL_VERSION,
-                    label=None
-                    if self.config.VIDEO_SKILL_VERSION
-                    else self.config.VIDEO_SKILL_LABEL,
-                )
-            )
-            video_skill = read_skill(archive, VIDEO_SKILL_NAME)
-            self.config.video_skill = video_skill
-            logger.info(
-                "视频技能已加载：名称=%s 摘要=%s",
+            self.config.video_skill = await self._load_managed_skill(
                 VIDEO_SKILL_NAME,
-                video_skill.digest[:12],
+                self.config.VIDEO_SKILL_VERSION,
+                self.config.VIDEO_SKILL_LABEL,
+            )
+        if self.config.IMAGE_SKILL_ENABLED:
+            if not self.config.NACOS_ENABLED or not self.config.IMAGE_ENABLED:
+                raise ValueError("图像技能需要启用 Nacos 和图像服务")
+            self.config.image_skill = await self._load_managed_skill(
+                IMAGE_SKILL_NAME,
+                self.config.IMAGE_SKILL_VERSION,
+                self.config.IMAGE_SKILL_LABEL,
             )
         if not self.config.EMAIL_SKILL_ENABLED:
             return
@@ -584,6 +595,23 @@ class NacosIntegration:
         skill = read_email_skill(archive)
         self.config.email_skill = skill
         logger.info("Loaded Nacos skill name=%s digest=%s", skill.name, skill.digest[:12])
+
+    async def _load_managed_skill(
+        self, name: str, version: str | None, label: str
+    ) -> SkillDefinition:
+        if self.ai_client is None:
+            self.ai_client = await NacosAIService.create_ai_service(self._client_config())
+        archive = await self.ai_client.download_skill_zip(
+            DownloadSkillParam(skill_name=name, version=version, label=None if version else label)
+        )
+        skill = read_skill(archive, name)
+        logger.info(
+            "Loaded Nacos skill name=%s selector=%s digest=%s",
+            name,
+            version or label,
+            skill.digest[:12],
+        )
+        return skill
 
     async def load_remote_prompts(self) -> None:
         if not self.config.NACOS_ENABLED:

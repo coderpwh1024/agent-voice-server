@@ -1,5 +1,8 @@
 import os
+from io import BytesIO
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
+from zipfile import ZipFile
 
 import pytest
 from pydantic import SecretStr
@@ -100,10 +103,6 @@ def test_mem0_research_settings_map_from_nacos():
 
 @pytest.mark.asyncio
 async def test_email_skill_downloads_published_version_and_rejects_bad_archive(ai_client):
-    from io import BytesIO
-    from pathlib import Path
-    from zipfile import ZipFile
-
     config = make_settings(
         NACOS_ENABLED=True, EMAIL_SKILL_ENABLED=True, EMAIL_SKILL_VERSION="1.0.0"
     )
@@ -138,10 +137,6 @@ def test_email_skill_settings_map_from_nacos():
 
 @pytest.mark.asyncio
 async def test_video_skill_downloads_pinned_version_and_fails_closed(ai_client):
-    from io import BytesIO
-    from pathlib import Path
-    from zipfile import ZipFile
-
     config = make_settings(
         NACOS_ENABLED=True,
         VIDEO_ENABLED=True,
@@ -183,6 +178,46 @@ async def test_video_skill_requires_nacos_and_video_service():
     config.VIDEO_ENABLED = False
     with pytest.raises(ValueError, match="视频服务"):
         await nacos.NacosIntegration(config).load_remote_skills()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("version", "label"), [("1.0.0", None), (None, "stable")])
+async def test_image_skill_loads_published_selector_and_rejects_bad_archive(
+    ai_client, version, label
+) -> None:
+    config = make_settings(NACOS_ENABLED=True, IMAGE_ENABLED=True)
+    nacos.apply_remote_settings(
+        config,
+        "skills:\n  image:\n    enabled: true\n    label: stable\n    timeout_seconds: 15\n"
+        + (f"    version: '{version}'\n" if version else ""),
+    )
+    assert config.IMAGE_SKILL_TIMEOUT_SECONDS == 15
+    integration = nacos.NacosIntegration(config)
+    buffer = BytesIO()
+    with ZipFile(buffer, "w") as package:
+        package.write(Path("skills/manage-user-images/SKILL.md"), "manage-user-images/SKILL.md")
+    ai_client.download_skill_zip.return_value = buffer.getvalue()
+    await integration.load_remote_skills()
+    assert config.image_skill is not None
+    assert "image_voice_operation" in config.image_skill.instructions
+    param = ai_client.download_skill_zip.await_args.args[0]
+    assert (param.skill_name, param.version, param.label) == ("manage-user-images", version, label)
+    ai_client.download_skill_zip.return_value = b"invalid"
+    with pytest.raises(ValueError):
+        await integration.load_remote_skills()
+    assert config.image_skill is None
+
+
+@pytest.mark.asyncio
+async def test_image_skill_requires_nacos_and_image_service(ai_client) -> None:
+    config = make_settings(IMAGE_SKILL_ENABLED=True, IMAGE_ENABLED=True, NACOS_ENABLED=False)
+    with pytest.raises(ValueError, match="Nacos"):
+        await nacos.NacosIntegration(config).load_remote_config()
+    config.NACOS_ENABLED = True
+    config.IMAGE_ENABLED = False
+    with pytest.raises(ValueError, match="图像服务"):
+        await nacos.NacosIntegration(config).load_remote_skills()
+    ai_client.download_skill_zip.assert_not_awaited()
 
 
 @pytest.mark.asyncio

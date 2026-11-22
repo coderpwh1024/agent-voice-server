@@ -96,7 +96,7 @@ streamlit_app.py         开发聊天界面
 | `app/agents/mem0_chat.py` | 唯一主 Agent；历史、记忆与业务分流 |
 | `app/agents/chat.py`、`app/agents/amap_chat.py` | 主模型调用、提示词上下文与视频 / 地图技能加载 |
 | `app/services/amap_mcp.py` | 高德官方 MCP 的鉴权、连接与资源释放 |
-| `app/services/skills/` | 邮件与视频 Skill 的受控执行 |
+| `app/services/skills/` | 邮件、视频与语音图像 Skill 的受控执行 |
 | `app/api/voice_connection.py`、`app/services/voice/` | WebSocket 会话、ASR/TTS 供应商、断句与播放协调 |
 | `app/services/memory/`、`app/core/database.py` | Mem0 SDK、长期记忆服务、PostgreSQL 检查点与 Store |
 | `app/services/video/` | 视频生成、编辑、异步状态同步与七牛归档 |
