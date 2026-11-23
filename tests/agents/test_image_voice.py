@@ -79,6 +79,63 @@ def setup(monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("expire", [False, True], ids=["topic-switch", "timeout"])
+async def test_voice_edit_asks_for_id_when_image_context_is_stale(setup, monkeypatch, expire):
+    graph, model, service, _ = setup
+    model.ainvoke.side_effect = [
+        operation("detail", image_id=12),
+        *([] if expire else [AIMessage(content="普通回复")]),
+        operation("edit", prompt="把背景换成蓝色"),
+    ]
+    service.query.return_value = image_task(12, ImageStatus.SUCCEEDED)
+    service.create.return_value = image_task(13, ImageStatus.QUEUED, parent=12)
+    await graph.ainvoke(user_input("查一下十二号图片的详情"), config())
+    if expire:
+        clock = Mock(wraps=datetime)
+        clock.now.return_value = datetime.now(UTC) + timedelta(minutes=11)
+        monkeypatch.setattr(image_voice, "datetime", clock)
+    else:
+        await graph.ainvoke(user_input("解释一下什么是质数", "other"), config())
+    follow_up = await graph.ainvoke(user_input("把这张图的背景换成蓝色", "edit"), config())
+    assert follow_up["messages"][0].response_metadata["image_status"] == "clarification"
+    assert "编号" in follow_up["messages"][0].text
+    service.create.assert_not_awaited()
+    model.ainvoke.side_effect = [operation("edit", image_id=12, prompt="把背景换成蓝色")]
+    explicit = await graph.ainvoke(user_input("把十二号图片的背景换成蓝色", "explicit"), config())
+    assert explicit["messages"][0].response_metadata["image"]["source_image_id"] == 12
+    assert service.create.await_args.kwargs["source_image_id"] == 12
+
+
+@pytest.mark.asyncio
+async def test_legacy_image_context_does_not_supply_an_edit_target(setup):
+    _, model, service, _ = setup
+    model.ainvoke.return_value = operation("edit", prompt="背景换蓝色")
+    service.create.return_value = image_task(13, ImageStatus.QUEUED, parent=12)
+    session = image_voice.ImageVoiceSession(
+        user_input("把这张图的背景换成蓝色")["messages"][0],
+        {"user_id": "7", "image_id": 12},
+        Mock(),
+    )
+    response = await session.answer(model, config())
+    assert response is not None and response.response_metadata["image_status"] == "clarification"
+    service.create.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_voice_background_change_requires_an_image_reference(setup):
+    graph, model, service, _ = setup
+    model.ainvoke.side_effect = [operation("detail", image_id=12), AIMessage(content="普通回复")]
+    service.query.return_value = image_task(12, ImageStatus.SUCCEEDED)
+    await graph.ainvoke(user_input("查一下十二号图片的详情"), config())
+    follow_up = await graph.ainvoke(user_input("把背景颜色改浅一点", "edit"), config())
+    assert follow_up["messages"][0].response_metadata.get("image_status") is None
+    assert all(
+        message.name != "image_skill_reference" for message in model.ainvoke.await_args.args[0]
+    )
+    service.create.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "transcript", ["请生成一张图像，纸艺风景里有一座绿色小山", "给我画个纸艺风格的小山"]
 )
@@ -193,12 +250,15 @@ async def test_voice_search_shows_single_match_and_details(setup, transcript, te
 
 
 @pytest.mark.asyncio
-async def test_voice_search_publishes_ordered_results_and_requires_a_follow_up_id(setup):
+@pytest.mark.parametrize(
+    ("transcript", "selected_id"),
+    [("十八号", 18), ("查一下 17 号", 17), ("16", 16), ("这张图的画面详情", None), ("19号", None)],
+)
+async def test_voice_search_publishes_ordered_results_and_accepts_a_follow_up_id(
+    setup, transcript, selected_id
+):
     graph, model, service, _ = setup
-    model.ainvoke.side_effect = [
-        operation("search", query="远山"),
-        operation("detail"),
-    ]
+    model.ainvoke.return_value = operation("search", query="远山")
     service.list_tasks.return_value = ImageTaskPage(
         items=[image_task(i, ImageStatus.SUCCEEDED) for i in range(18, 12, -1)],
         total=8,
@@ -218,10 +278,43 @@ async def test_voice_search_publishes_ordered_results_and_requires_a_follow_up_i
     assert final["type"] == "execution.progress"
     assert final["image_results"] == {"items": result["items"], "total": 8}
     assert "8 张" in final["text"] and "6 张" in final["text"]
-    follow_up = await graph.ainvoke(user_input("这张图的详情", "two"), config())
-    assert follow_up["messages"][0].response_metadata["image_status"] == "clarification"
-    service.query.assert_not_awaited()
+    service.query.return_value = image_task(selected_id or 18, ImageStatus.SUCCEEDED)
+    follow_up = await graph.ainvoke(user_input(transcript, "two"), config())
+    metadata = follow_up["messages"][0].response_metadata
+    if selected_id is not None:
+        assert metadata["image"]["id"] == selected_id
+        service.query.assert_awaited_once_with(selected_id, 7)
+        assert model.ainvoke.await_count == 1
+    else:
+        assert metadata["image_status"] == "clarification"
+        service.query.assert_not_awaited()
+        correction = await graph.ainvoke(user_input("十八号", "three"), config())
+        assert correction["messages"][0].response_metadata["image"]["id"] == 18
+        service.query.assert_awaited_once_with(18, 7)
+        assert model.ainvoke.await_count == 1
     service.create.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_voice_short_id_does_not_reuse_a_list_after_another_topic(setup):
+    graph, model, service, _ = setup
+    model.ainvoke.side_effect = [
+        operation("search", query="远山"),
+        AIMessage(content="普通回复"),
+        AIMessage(content="普通回复"),
+    ]
+    service.list_tasks.return_value = ImageTaskPage(
+        items=[image_task(i, ImageStatus.SUCCEEDED) for i in (18, 17)],
+        total=2,
+        page=1,
+        page_size=6,
+        total_pages=1,
+    )
+    await graph.ainvoke(user_input("找找远山的图片"), config())
+    await graph.ainvoke(user_input("解释一下什么是质数", "other"), config())
+    follow_up = await graph.ainvoke(user_input("十八号", "number"), config())
+    assert follow_up["messages"][0].response_metadata.get("image_status") is None
+    service.query.assert_not_awaited()
 
 
 @pytest.mark.asyncio

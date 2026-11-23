@@ -34,7 +34,7 @@ class Mem0ChatState(TypedDict):
     memory_dialogue: NotRequired[dict[str, Any]]
     email_dialogue: NotRequired[dict[str, Any] | None]
     video_dialogue: NotRequired[dict[str, Any] | None]
-    image_dialogue: NotRequired[dict[str, str | int] | None]
+    image_dialogue: NotRequired[dict[str, Any] | None]
     local_memory_epoch: NotRequired[int]
     local_memory_context_start: NotRequired[int]
 
@@ -180,11 +180,12 @@ async def _mem0_chat(
                     "memory_dialogue": dialogue.model_dump(mode="json"),
                     "email_dialogue": email_dialogue,
                     "video_dialogue": video_dialogue,
-                    "image_dialogue": image_dialogue,
+                    "image_dialogue": None,
                 },
             )
         image = ImageVoiceSession(human, image_dialogue, get_stream_writer())
         image_response = await image.answer(model, config)
+        image_dialogue = image.saved
         if image_response is not None:
             return entrypoint.final(
                 value={"messages": [image_response]},
@@ -193,7 +194,7 @@ async def _mem0_chat(
                     "memory_dialogue": dialogue.model_dump(mode="json"),
                     "email_dialogue": email_dialogue,
                     "video_dialogue": video_dialogue,
-                    "image_dialogue": image.saved,
+                    "image_dialogue": image_dialogue,
                 },
             )
         command_response = (

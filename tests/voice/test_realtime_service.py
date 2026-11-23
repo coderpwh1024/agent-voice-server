@@ -2533,7 +2533,8 @@ def test_audio_triggers_managed_video_skill_for_create_list_detail_and_edit(
     assert len(repo.records) == 4
 
 
-def test_voice_audio_streams_image_search_and_detail(voice_env, monkeypatch):
+@pytest.mark.parametrize("detail_request", ["查看三十一号图片的详情", "三十一号"])
+def test_voice_audio_streams_image_search_and_detail(voice_env, monkeypatch, detail_request):
     import importlib
 
     import app.api.voice as voice_routes
@@ -2544,7 +2545,7 @@ def test_voice_audio_streams_image_search_and_detail(voice_env, monkeypatch):
     class ImageSpeech(FakeSpeech):
         def __init__(self, config):
             super().__init__(config)
-            self.transcripts = iter(["找找画着蓝色小船的图片", "查看三十一号图片的详情"])
+            self.transcripts = iter(["找找画着蓝色小船的图片", detail_request])
 
         async def append_audio(self, ws, pcm):
             transcript = next(self.transcripts)
