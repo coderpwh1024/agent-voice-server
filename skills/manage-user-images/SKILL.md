@@ -4,7 +4,7 @@ description: 处理语音对话中明确要求生成、编辑或查询的静态�
 license: MIT
 compatibility: Requires agent-voice-server, Nacos Skill management, an authenticated app user, PostgreSQL, Alibaba Cloud Qwen Image and Qiniu storage.
 metadata:
-  version: 1.0.2
+  version: 1.0.3
   runtime-capability: manage_user_images
 ---
 
@@ -51,7 +51,11 @@ metadata:
 
 用户按标题或画面内容查找图片时，使用 `search`。从本轮原话提取连续的作品名或画面关键词填入 `query`。明确按标题查找时设 `search_field=title`，按画面内容查找时设 `search_field=content`，维度未明确时可留空。画面内容检索依据已保存的生成描述。搜索可能返回多张图片，数量和预览以工具执行结果为准。
 
-「找标题叫远山的图片」使用 `query=远山`、`search_field=title`。「看看有没有画着蓝色小船的图片」使用 `query=蓝色小船`、`search_field=content`。缺少编号、标题或关键词时使用 `clarify`。
+「找标题叫远山的图片」使用 `query=远山`、`search_field=title`。「看看有没有画着蓝色小船的图片」使用 `query=蓝色小船`、`search_field=content`。查询条件不清楚时使用 `clarify`。
+
+## 浏览近期图片 `recent`
+
+「看看我的图片」或「看看我最近三天的图片」使用 `recent`。按编号、标题或画面关键词的有效查询未命中时，服务端自动查询最近 72 小时创建的本人图片任务。播报和展示以服务端实际返回的记录为准。
 
 ## 停止或补充 `clarify`
 

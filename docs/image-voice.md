@@ -4,6 +4,8 @@
 
 可以说「查一下十二号图片的详情」「帮我找标题叫远山的图像」或「看看有没有画着蓝色小船的图片」。按画面关键词时检索作品的生成描述。单条结果会播报标题、编号、状态、生成描述摘要与已指定的尺寸。多个结果按作品编号从新到旧展示，语音说明匹配总数，每轮最多展示六张。打开卡片可查看当前详情，或继续说出其中一个编号。查询范围为当前用户的未删除作品。
 
+按编号、标题或画面关键词找不到图片时，语音会说明未命中，并显示当前用户最近三天创建的图片任务。也可以直接说「看看我最近三天的图片」。三天按查询时刻往前 72 小时计算，结果按创建时间倒序，最多展示六张。近期也没有记录时会明确提示。生成中和失败的记录显示真实状态，成图保存后会在语音首页的卡片中更新。
+
 ## 在 Nacos 管理 Skill
 
 `manage-user-images` 位于 Nacos 控制台的「AI 注册中心 → Skill 管理」。仓库中的 [SKILL.md](../skills/manage-user-images/SKILL.md) 是发布源文件，包含生成、编辑、查询、追问和分步编辑的工作流。服务启动时下载配置指定的已发布版本，只有识别到语音图像请求时才将说明作为参考交给对话模型。鉴权、操作参数、幂等、并发与编辑上限由服务端执行。
@@ -38,7 +40,7 @@ skills:
 
 ## 语音事件与错误
 
-单条任务通过 WebSocket `agent.custom` 发送，事件 `data.type` 为 `image.task`。`data.image` 包含 `id`、`title`、`status`、`image_url`、`source_image_id`、`error_code` 和可选的 `size`。多条结果使用 `image.list`，携带 `items` 和 `total`。`execution.progress` 及执行历史分别使用可选的 `image` 和 `image_results` 字段。只有转存成功时才返回七牛地址。
+单条任务通过 WebSocket `agent.custom` 发送，事件 `data.type` 为 `image.task`。`data.image` 包含 `id`、`title`、`status`、`image_url`、`source_image_id`、`error_code` 和可选的 `size`、`create_time`。多条结果和近三天列表使用 `image.list`，携带 `items` 和 `total`。`execution.progress` 及执行历史分别使用可选的 `image` 和 `image_results` 字段。只有转存成功时才返回七牛地址。
 
 可以在图像工作室管理标题和删除作品。上传参考素材时，工作室会先请求 `POST /files`，再用返回的素材 ID 提交生成或编辑任务。
 

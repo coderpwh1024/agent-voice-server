@@ -1,7 +1,7 @@
 import importlib
 import json
-from datetime import UTC, datetime
-from unittest.mock import AsyncMock, Mock
+from datetime import UTC, datetime, timedelta
+from unittest.mock import AsyncMock, Mock, call
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
@@ -79,11 +79,14 @@ def setup(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_voice_generation_is_idempotent_and_publishes_structured_task(setup):
+@pytest.mark.parametrize(
+    "transcript", ["请生成一张图像，纸艺风景里有一座绿色小山", "给我画个纸艺风格的小山"]
+)
+async def test_voice_generation_is_idempotent_and_publishes_structured_task(setup, transcript):
     graph, model, service, memory = setup
     model.ainvoke.return_value = operation("create", prompt="纸艺风景，一座绿色小山")
     service.create.return_value = image_task(12, ImageStatus.QUEUED)
-    request = user_input("请生成一张图像，纸艺风景里有一座绿色小山")
+    request = user_input(transcript)
     events = [event async for event in graph.astream(request, config(), stream_mode="custom")]
     task_event = next(
         event.content[0] for event in events if event.content[0]["type"] == "image.task"
@@ -229,9 +232,66 @@ async def test_voice_search_reports_no_results_without_a_fabricated_image(setup)
         items=[], total=0, page=1, page_size=6, total_pages=0
     )
     result = await graph.ainvoke(user_input("展示蓝色小船的图片"), config())
-    data = result["messages"][0].response_metadata
+    answer = result["messages"][0]
+    data = answer.response_metadata
     assert data["image_status"] == "not_found"
+    assert "最近 3 天没有可展示的图片" in answer.content
+    assert service.list_tasks.await_count == 2
     assert "image" not in data["execution"] and "image_results" not in data["execution"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("transcript", "intent", "original_query"),
+    [
+        ("找找标题叫远山的图片", operation("search", query="远山"), True),
+        ("查一下图像编号 999", operation("detail", image_id=999), False),
+        ("看看我最近三天的图片", operation("recent"), False),
+    ],
+)
+async def test_voice_query_lists_images_from_three_days_on_miss_or_explicit_request(
+    setup, transcript, intent, original_query
+):
+    graph, model, service, _ = setup
+    model.ainvoke.return_value = intent
+    service.query.side_effect = LookupError
+    recent = ImageTaskPage(
+        items=[image_task(15, ImageStatus.SUCCEEDED)], total=1, page=1, page_size=6, total_pages=1
+    )
+    empty = recent.model_copy(update={"items": [], "total": 0, "total_pages": 0})
+    service.list_tasks.side_effect = [empty, recent] if original_query else [recent]
+    start = datetime.now(UTC) - timedelta(days=3)
+    events = [
+        event.content[0]
+        async for event in graph.astream(user_input(transcript), config(), stream_mode="custom")
+    ]
+    end = datetime.now(UTC) - timedelta(days=3)
+    assert service.list_tasks.await_count == (2 if original_query else 1)
+    if original_query:
+        assert service.list_tasks.await_args_list[0] == call(
+            7, ImageListQuery(q="远山", page_size=6)
+        )
+    args, kwargs = service.list_tasks.await_args
+    assert args == (7, ImageListQuery(page_size=6))
+    assert start <= kwargs["created_since"] <= end
+    result = next(event for event in events if event["type"] == "image.list")
+    assert result["items"][0]["id"] == 15
+    assert datetime.fromisoformat(result["items"][0]["create_time"]) == recent.items[0].create_time
+    final = events[-1]
+    assert final["image_results"] == {"items": result["items"], "total": 1}
+    assert "最近 3 天有 1 张图片" in final["text"]
+    assert ("没有找到符合条件" in final["text"]) == (transcript != "看看我最近三天的图片")
+    service.create.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_voice_query_does_not_report_a_database_failure_as_no_match(setup):
+    graph, model, service, _ = setup
+    model.ainvoke.return_value = operation("detail", image_id=12)
+    service.query.side_effect = RuntimeError
+    result = await graph.ainvoke(user_input("查一下十二号图片"), config())
+    assert result["messages"][0].response_metadata["image_status"] == "operation_failed"
+    service.list_tasks.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -247,6 +307,7 @@ async def test_voice_search_reports_no_results_without_a_fabricated_image(setup)
         ),
         ("请生成一张图片", config(), AIMessage(content="虚构的图片"), "clarification"),
         ("请生成一张图片", config(), TimeoutError(), "timeout"),
+        ("不要查询我的图片", config(), operation("recent"), "clarification"),
         (
             "查一下标题叫去掉背景的图片",
             config(),

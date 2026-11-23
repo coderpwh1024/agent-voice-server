@@ -130,8 +130,10 @@ class ImageService:
             self.wake.set()
         return task
 
-    async def list_tasks(self, user_id: int, query: ImageListQuery) -> ImageTaskPage:
-        return await self.repo.list(user_id, query)
+    async def list_tasks(
+        self, user_id: int, query: ImageListQuery, *, created_since: datetime | None = None
+    ) -> ImageTaskPage:
+        return await self.repo.list(user_id, query, created_since=created_since)
 
     async def update_metadata(
         self, image_id: int, user_id: int, body: ImageMetadataUpdate

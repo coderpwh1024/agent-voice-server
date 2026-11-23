@@ -7015,6 +7015,18 @@
               }
             ],
             "title": "Size"
+          },
+          "create_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Create Time"
           }
         },
         "type": "object",

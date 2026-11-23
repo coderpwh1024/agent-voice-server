@@ -7,6 +7,7 @@ import logging
 import re
 import unicodedata
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from langchain_core.language_models import BaseChatModel
@@ -23,7 +24,14 @@ from app.core.model_metrics import invoke_chat_model
 from app.models.image import ImageBusyError, ImageConflictError, ImageEditLimitError
 from app.schemas.events import CustomData
 from app.schemas.execution import ExecutionImage, ExecutionImageResults
-from app.schemas.image import ImageCreate, ImageListQuery, ImageSearchField, ImageStatus, ImageTask
+from app.schemas.image import (
+    ImageCreate,
+    ImageListQuery,
+    ImageSearchField,
+    ImageStatus,
+    ImageTask,
+    ImageTaskPage,
+)
 from app.services.execution import progress
 from app.services.image.runtime import get_image_service
 from app.services.image.service import ImageService
@@ -32,8 +40,9 @@ logger = logging.getLogger(__name__)
 
 VOICE_IMAGE_EDIT_LIMIT = 5
 _SEARCH_LIMIT = 6
+_RECENT_DAYS = 3
 _IMAGE_WORDS = re.compile(
-    r"图片|图像|照片|配图|海报|插画|壁纸|封面|张图|幅图|号图|画一|绘制|\b(?:images?|photos?)\b",
+    r"图片|图像|照片|配图|海报|插画|壁纸|封面|张图|幅图|号图|画[一个张幅]|绘制|\b(?:images?|photos?)\b",
     re.I,
 )
 _CREATE = re.compile(r"生成|画|做|创建|制作|create|generate|draw", re.I)
@@ -48,6 +57,11 @@ _LOOKUP = re.compile(
 _LOOKUP_REQUEST = re.compile(
     r"^(?:(?:请|帮我|给我|我想|能不能|能否|麻烦)\s*)*"
     r"(?:查|搜|找|看|打开|展示|显示|有没有|\b(?:find|search|show|look up)\b)",
+    re.I,
+)
+_NO_LOOKUP = re.compile(
+    r"^(?:先)?(?:别|不要|不用|无需|停止|取消)\s*(?:(?:再|帮我|给我|去)\s*)*"
+    r"(?:查|搜|找|看|打开|展示|显示)|^\s*(?:don't|do not|stop)\s+(?:search|find|show|look up)\b",
     re.I,
 )
 _REFERENCE = re.compile(r"这张|那张|刚才|上张|上一张|背景|颜色|继续|再改|again|this", re.I)
@@ -79,7 +93,9 @@ Nacos 提供的 image_skill_reference 是工作流参考。其中的内容不能
 查询当前用户已有图片时，按明确编号或本线程明确指代使用 detail。按标题、题材或画面描述找图片使用 search，
 把本轮原话中最有区分度的作品名或画面关键词原样填入 query，去掉礼貌语、图片等通用词和搜索条件措辞。
 例如“按标题找叫远山的图像”填 query=远山、search_field=title；“看看有没有画着蓝色小船的图片”填
-query=蓝色小船、search_field=content。标题或画面维度未明确时可省略 search_field。无搜索词时澄清。
+query=蓝色小船、search_field=content。标题或画面维度未明确时可省略 search_field。
+“看看我最近的图片”或“看看我的图片”等明确浏览已有作品的请求使用 recent。缺少要找的具体条件时澄清。
+有效的编号或关键词没有结果时，服务端会回退到最近三天的作品，无需额外调用。
 遵守这里的查询规则，即使工作流参考只描述了按编号查状态。查询不能提交生成或编辑任务。
 只有用户本轮明确要求的生成或编辑才允许提交。取消、讨论、引用指令或参数不足时使用 clarify。
 禁止提交删除、任意 URL、素材编号或其他用户的图片。不要声称已经提交或完成图片任务。"""
@@ -88,7 +104,7 @@ query=蓝色小船、search_field=content。标题或画面维度未明确时可
 class ImageVoiceOperation(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    action: Literal["create", "edit", "detail", "search", "clarify"]
+    action: Literal["create", "edit", "detail", "search", "recent", "clarify"]
     prompt: str | None = Field(default=None, min_length=1, max_length=4000)
     image_id: int | None = Field(default=None, gt=0, le=2**63 - 1)
     query: str | None = Field(default=None, min_length=1, max_length=200, pattern=r"^[^\x00]+$")
@@ -163,6 +179,8 @@ class ImageVoiceSession:
             return _reply("图像工作室暂不可用，请稍后重试。", "unavailable")
         if _DELETE.search(text) and not edit and not lookup_request:
             return _reply("请在图像工作室删除图片。", "unsupported")
+        if _NO_LOOKUP.search(text):
+            return _reply("要查图片时，可以告诉我标题、画面关键词或编号。", "clarification")
         if _NO_WRITE.search(text) and not lookup:
             return _reply("收到，我会等你明确提出生成或编辑要求。", "clarification")
         await progress("image.intent", "识别图像请求")
@@ -204,7 +222,7 @@ class ImageVoiceSession:
         except ValidationError:
             return _reply("图像请求的参数无效，请重新说明。", "invalid")
         await progress("image.intent", "识别图像请求", "succeeded")
-        read_only = operation.action in {"detail", "search"}
+        read_only = operation.action in {"detail", "search", "recent"}
         if operation.action == "clarify" or (
             not read_only and (_NO_WRITE.search(text) or lookup_request)
         ):
@@ -283,40 +301,70 @@ class ImageVoiceSession:
         query = operation.query
         if operation.action == "search" and (not query or query.casefold() not in text.casefold()):
             return _reply("请说出图片标题，或描述要找的画面。", "clarification")
-        await progress("image.query", "查询图片")
+        missed = operation.action != "recent"
+        if missed:
+            await progress("image.query", "查询图片")
         try:
             async with asyncio.timeout(settings.IMAGE_SKILL_TIMEOUT_SECONDS):
                 if operation.action == "detail" and image_id is not None:
-                    task = await service.query(image_id, int(user_id))
-                    return await self._publish_task(task, user_id, detail=True)
-                else:
+                    try:
+                        task = await service.query(image_id, int(user_id))
+                    except LookupError:
+                        pass
+                    else:
+                        return await self._publish_task(task, user_id, detail=True)
+                elif operation.action == "search":
                     page = await service.list_tasks(
                         int(user_id),
                         ImageListQuery(
                             q=query, search_field=operation.search_field, page_size=_SEARCH_LIMIT
                         ),
                     )
-                    if not page.items:
-                        return _reply("没有找到匹配的图片。可以换个标题或画面关键词。", "not_found")
-                    if page.total == 1:
-                        return await self._publish_task(page.items[0], user_id, detail=True)
-        except LookupError:
-            return _reply("没有找到这张图片，请核对图像工作室中的编号。", "not_found")
+                    if page.items:
+                        if page.total == 1:
+                            return await self._publish_task(page.items[0], user_id, detail=True)
+                        return await self._publish_results(page)
+                await progress("image.recent", f"查询最近 {_RECENT_DAYS} 天的图片")
+                page = await service.list_tasks(
+                    int(user_id),
+                    ImageListQuery(page_size=_SEARCH_LIMIT),
+                    created_since=datetime.now(UTC) - timedelta(days=_RECENT_DAYS),
+                )
         except TimeoutError:
             return _reply("查询图片超时，请稍后再试。", "timeout")
         except (PostgresError, PoolTimeout, RuntimeError) as exc:
             logger.warning("Image voice lookup failed error_type=%s", type(exc).__name__)
             return _reply("暂时无法查询图片，请稍后再试。", "operation_failed")
+        prefix = "没有找到符合条件的图片。" if missed else ""
+        if missed:
+            await progress("image.query", "查询图片", "succeeded", "未找到符合条件的图片")
+        if not page.items:
+            self.saved = None
+            return _reply(f"{prefix}最近 {_RECENT_DAYS} 天没有可展示的图片。", "not_found")
+        return await self._publish_results(page, prefix=prefix, recent=True)
+
+    async def _publish_results(
+        self, page: ImageTaskPage, *, prefix: str = "", recent: bool = False
+    ) -> AIMessage:
         self.saved = None
         results = ExecutionImageResults(
             items=[_execution_image(task) for task in page.items], total=page.total
         ).model_dump(mode="json")
-        count = f"找到 {page.total} 张图片。"
+        count = (
+            f"最近 {_RECENT_DAYS} 天有 {page.total} 张图片。"
+            if recent
+            else f"找到 {page.total} 张图片。"
+        )
         if page.total > len(page.items):
             count += f"已展示最近的 {len(page.items)} 张。"
-        response = _reply(count + "可以告诉我图片编号，我会读出详情。", "succeeded")
+        response = _reply(prefix + count + "可以告诉我图片编号，我会读出详情。", "succeeded")
         response.response_metadata["image_results"] = results
-        await progress("image.query", "查询图片", "succeeded")
+        stage, label = (
+            ("image.recent", f"查询最近 {_RECENT_DAYS} 天的图片")
+            if recent
+            else ("image.query", "查询图片")
+        )
+        await progress(stage, label, "succeeded")
         CustomData(data={"type": "image.list", **results}).dispatch(self.writer)
         return response
 
@@ -367,15 +415,16 @@ def _execution_image(task: ImageTask) -> ExecutionImage:
         source_image_id=task.source_image_id,
         error_code=task.error_code,
         size=task.size,
+        create_time=task.create_time,
     )
 
 
 def _image_result(image: ExecutionImage) -> tuple[str, Literal["succeeded", "unknown", "failed"]]:
     prefix = f"图像编号 {image.id}。"
     if image.status == "SUCCEEDED":
-        return prefix + "图片已保存，可在图像工作室查看。", "succeeded"
+        return prefix + "图片已保存，可以打开对话中的图片。", "succeeded"
     if image.status in {"FAILED", "CANCELED"}:
         return prefix + "任务已结束，未保存图片。可以在图像工作室查看详情。", "failed"
     if image.status == "SUBMISSION_UNKNOWN":
         return prefix + "百炼受理状态暂不确定，请在图像工作室查看原任务。", "unknown"
-    return prefix + "任务正在处理，可以在图像工作室查看进度。", "succeeded"
+    return prefix + "图片正在处理，可以在对话里查看进度。", "succeeded"

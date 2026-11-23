@@ -2,6 +2,7 @@
 
 import asyncio
 import hashlib
+from datetime import datetime
 from typing import Any, LiteralString, cast
 
 from psycopg import AsyncConnection
@@ -186,9 +187,16 @@ class ImageRepository:
             ).fetchone()
         return ImageTask.model_validate(row) if row else None
 
-    async def list(self, user_id: int, query: ImageListQuery) -> ImageTaskPage:
+    async def list(
+        self, user_id: int, query: ImageListQuery, *, created_since: datetime | None = None
+    ) -> ImageTaskPage:
         filters: list[Composable] = [SQL("user_id = %s AND is_delete = 0")]
         params: list[object] = [user_id]
+        order = SQL("id DESC")
+        if created_since is not None:
+            filters.append(SQL("create_time >= %s"))
+            params.append(created_since)
+            order = SQL("create_time DESC, id DESC")
         if query.status is not None:
             filters.append(SQL("status = %s"))
             params.append(query.status)
@@ -215,8 +223,8 @@ class ImageRepository:
                 await conn.execute(
                     SQL("""
                         SELECT {} FROM image_generation_tasks WHERE {}
-                        ORDER BY id DESC LIMIT %s OFFSET %s
-                    """).format(_COLUMNS, where),
+                        ORDER BY {} LIMIT %s OFFSET %s
+                    """).format(_COLUMNS, where, order),
                     [*params, query.page_size, (query.page - 1) * query.page_size],
                 )
             ).fetchall()

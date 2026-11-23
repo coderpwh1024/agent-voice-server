@@ -1,6 +1,7 @@
 import asyncio
 from collections.abc import AsyncIterator
 from contextlib import suppress
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -203,6 +204,38 @@ async def test_image_edit_chain_boundary_and_titles(repo: ImageRepository) -> No
     await service.delete(old_id, 12)
     assert (await service.list_tasks(12, title)).total == 0
     assert (await service.list_tasks(12, ImageListQuery())).total == 5
+
+
+async def test_recent_image_query_orders_by_creation_and_keeps_ownership(repo: ImageRepository):
+    service = _service(repo, AsyncMock(), AsyncMock())
+    service.max_active_per_user = 10
+    cutoff = datetime.now(UTC) - timedelta(days=3)
+    before_cutoff = cutoff - timedelta(microseconds=1)
+    newer = cutoff + timedelta(seconds=1)
+    expected_ids = []
+    for key, owner, instant in [
+        ("newer", 12, newer),
+        ("boundary", 12, cutoff),
+        ("older", 12, before_cutoff),
+        ("deleted", 12, newer),
+        ("another-user", 13, newer),
+    ]:
+        task = await service.create(owner, key, ImageCreate(prompt="山谷"))
+        async with repo.pool.connection() as conn:
+            await conn.execute(
+                """
+                UPDATE image_generation_tasks
+                SET create_time = %s, update_time = CURRENT_TIMESTAMP,
+                    update_by = %s, is_delete = %s
+                WHERE id = %s AND user_id = %s
+                """,
+                (instant, owner, int(key == "deleted"), task.id, owner),
+            )
+        if key in {"newer", "boundary"}:
+            expected_ids.append(task.id)
+    page = await service.list_tasks(12, ImageListQuery(page_size=6), created_since=cutoff)
+    assert page.total == 2
+    assert [task.id for task in page.items] == expected_ids
 
 
 async def test_uploaded_references_preserve_order_and_user_ownership(repo: ImageRepository) -> None:
