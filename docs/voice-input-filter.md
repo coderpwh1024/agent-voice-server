@@ -33,13 +33,15 @@ voice:
 
 待确认不创建 `VoiceTurn`、不运行模型、记忆或工具，也不因该输入取消上一轮播报。用户可以继续说话，或编辑候选文字后显式发送。分类不是 KK/Q 黑名单；用户明确发送的英文、简称和字母不会被此流程过滤。
 
+本地关键词检测触发后，轻声唤醒确认会使用比 `VOICE_INPUT_RMS_DBFS` 低 12 dB 的能量阈值，下限为 −90 dBFS。ASR 仍须匹配完整唤醒词，且片段时长和有效能量时长都须达标。通过该检查时，服务端播放唤醒问候，同一片段中跟在唤醒词后的指令由用户确认后发送。
+
 音频能量不等同于人声概率，近场 VAD 也不能排除所有误识别。没有原始问题音频时，自动化通过只能证明已覆盖的条件，不能声称真实环境不会再误触发。
 
 ## 增量事件与兼容
 
 保持协议版本 `1`、PCM 帧格式、认证、线程所有权、输入幂等和取消语义不变。`/voice/capabilities` 和 `session.ready` 增加 `transcript_review: true`，支持该流程的客户端消费新增的 `transcript.review`。
 
-待确认时，先发送同一 `input_id` 的空 `transcript.final`，清除临时字幕，再发送以下事件数据；实际事件还带有既有的 event、sequence、session 和 connection 标识：
+普通片段进入待确认时，先发送同一 `input_id` 的空 `transcript.final` 清除临时字幕，再发送以下事件数据。轻声唤醒通过时依次发送带原转写的 `transcript.final`、`command` 为空的 `wake.accepted`，以及仅含后续指令的 `transcript.review`（如果有指令）。实际事件还带有既有的 event、sequence、session 和 connection 标识：
 
 ```json
 {
