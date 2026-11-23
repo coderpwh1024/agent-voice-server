@@ -152,6 +152,8 @@ class ExecutionTrace:
             outcome = "unknown"
         elif business_status == "cancelled":
             outcome = "cancelled"
+        elif business_status == "partial":
+            outcome = "warning"
         elif business_status in {
             "invalid",
             "timeout",

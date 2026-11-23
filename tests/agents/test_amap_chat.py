@@ -268,7 +268,58 @@ async def test_amap_route_accepts_two_geocodes_in_one_model_turn(amap_client):
     route_messages = model.ainvoke.await_args_list[2].args[0]
     assert [
         message.tool_call_id for message in route_messages if isinstance(message, ToolMessage)
+    ] == ["load", "geo-start", "geo-end"]
+    final_messages = model.ainvoke.await_args_list[-1].args[0]
+    assert [
+        message.tool_call_id for message in final_messages if isinstance(message, ToolMessage)
     ] == ["load", "geo-start", "geo-end", "route"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("batch_sizes", "executed_count", "status"),
+    [((5,), 0, "limited"), ((3, 2), 3, "partial"), ((3, 1), 4, "succeeded")],
+)
+async def test_amap_call_budget_preserves_completed_results(
+    amap_client, batch_sizes, executed_count, status
+):
+    cities = ("杭州", "宁波", "温州", "金华", "衢州")
+    weather_calls = [
+        {"name": "maps_weather", "args": {"city": city}, "id": f"weather-{city}"} for city in cities
+    ]
+    loader = AIMessage(
+        content="", tool_calls=[{"name": "load_amap_maps", "args": {}, "id": "load"}]
+    )
+    decisions = [loader]
+    offset = 0
+    for size in batch_sizes:
+        decisions.append(AIMessage(content="", tool_calls=weather_calls[offset : offset + size]))
+        offset += size
+    final_text = "杭州的天气已查到。" if status == "succeeded" else "杭州已查到，衢州还没有查到。"
+    if executed_count:
+        decisions.append(AIMessage(content=final_text))
+    model = _model(*decisions)
+
+    response = await answer_chat(model, [HumanMessage(content="比较几个城市的天气")], CONFIG)
+
+    assert response.response_metadata["map_status"] == status
+    assert [call.args[1]["city"] for call in amap_client.call_tool.await_args_list] == list(
+        cities[:executed_count]
+    )
+    assert model.ainvoke.await_count == len(decisions)
+    lookup_prompt = model.ainvoke.await_args_list[1].args[0]
+    assert any("剩余 4 次" in message.text for message in lookup_prompt)
+    if executed_count:
+        second_prompt = model.ainvoke.await_args_list[2].args[0]
+        assert any("剩余 1 次" in message.text for message in second_prompt)
+        assert response.text == final_text
+        final_prompt = model.ainvoke.await_args_list[-1].args[0]
+        assert [
+            message.tool_call_id
+            for message in final_prompt
+            if isinstance(message, ToolMessage) and "untrusted_map_result" in message.text
+        ] == [call["id"] for call in weather_calls[:executed_count]]
+        assert any("未查到" in message.text for message in final_prompt)
 
 
 @pytest.mark.asyncio

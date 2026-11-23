@@ -121,6 +121,7 @@ async def test_cancellation_after_submission_keeps_the_known_video_result():
         ({"memory_status": "clarification_required"}, "waiting_input"),
         ({"email_status": "scheduled"}, "succeeded"),
         ({"email_status": "unknown"}, "unknown"),
+        ({"map_status": "partial"}, "warning"),
     ],
 )
 async def test_business_outcomes_remain_distinct(metadata, expected):
