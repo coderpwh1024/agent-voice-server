@@ -252,6 +252,7 @@ def test_committed_environment_profiles(
     assert settings.PORT == port
     assert settings.NACOS_SERVER_ADDR == server_addr
     assert settings.NACOS_CONSOLE_URL == console_url
+    assert settings.NACOS_CONFIG_DATA_ID == "agent-voice.yaml"
 
 
 def test_test_environment_template_does_not_register_local_instance():

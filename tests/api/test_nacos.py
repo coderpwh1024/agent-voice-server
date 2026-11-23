@@ -750,10 +750,23 @@ def test_apply_remote_settings_rejects_invalid_payloads(content: str, message: s
 
 
 @pytest.mark.asyncio
-async def test_load_remote_config(monkeypatch, tmp_path) -> None:
+@pytest.mark.parametrize(
+    "data_ids",
+    [
+        ("agent-voice.yaml",),
+        ("agent-service-toolkit.yaml",),
+        ("custom.yaml",),
+        ("agent-voice.yaml", "agent-service-toolkit.yaml"),
+        ("agent-service-toolkit.yaml", "agent-voice.yaml"),
+    ],
+)
+async def test_load_remote_config(
+    monkeypatch, tmp_path, ai_client, data_ids: tuple[str, ...]
+) -> None:
     config = make_settings(
         NACOS_ENABLED=True,
-        NACOS_CONFIG_DATA_ID="agent-service-toolkit.yaml",
+        NACOS_CONFIG_DATA_ID=data_ids[0],
+        NACOS_GROUP_NAME="APP_GROUP",
         NACOS_STORAGE_CONFIG_REQUIRED=False,
         NACOS_USERNAME="nacos",
         NACOS_PASSWORD=SecretStr("secret"),
@@ -761,7 +774,7 @@ async def test_load_remote_config(monkeypatch, tmp_path) -> None:
         NACOS_LOG_DIR=str(tmp_path / "logs"),
     )
     config_client = AsyncMock()
-    config_client.get_config.return_value = "RAG_TOP_K: 7\n"
+    config_client.get_config.side_effect = [""] * (len(data_ids) - 1) + ["RAG_TOP_K: 7\n"]
     create_config_service = AsyncMock(return_value=config_client)
     monkeypatch.setattr(
         nacos.NacosConfigService,
@@ -773,9 +786,11 @@ async def test_load_remote_config(monkeypatch, tmp_path) -> None:
     await integration.load_remote_config()
 
     assert config.RAG_TOP_K == 7
-    request = config_client.get_config.await_args.args[0]
-    assert request.data_id == "agent-service-toolkit.yaml"
-    assert request.group == "DEFAULT_GROUP"
+    requests = [call.args[0] for call in config_client.get_config.await_args_list]
+    assert [(request.data_id, request.group) for request in requests] == [
+        (data_id, "APP_GROUP") for data_id in data_ids
+    ]
+    assert ai_client.get_prompt.await_count == len(config.MEM0_PROMPT_KEYS.model_dump())
     client_config = create_config_service.await_args.args[0]
     assert client_config.server_list == ["127.0.0.1:8848"]
     assert client_config.username == "nacos"
@@ -817,27 +832,38 @@ async def test_nacos_bootstrap_loads_grouped_models_without_local_provider(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("unavailable", [False, True])
+@pytest.mark.parametrize(
+    ("data_id", "content", "error", "attempts"),
+    [
+        ("agent-voice.yaml", "", "unavailable", 2),
+        ("agent-voice.yaml", "{", "valid YAML", 1),
+        ("agent-voice.yaml", RuntimeError("unavailable"), "unavailable", 1),
+        ("custom.yaml", "", "unavailable", 1),
+    ],
+)
 async def test_nacos_config_failure_does_not_fall_back_to_local_provider(
-    monkeypatch, tmp_path, unavailable: bool
+    monkeypatch, tmp_path, data_id: str, content: str | RuntimeError, error: str, attempts: int
 ) -> None:
     config = make_settings(
         NACOS_ENABLED=True,
-        NACOS_CONFIG_DATA_ID="agent-service-toolkit.yaml",
+        NACOS_CONFIG_DATA_ID=data_id,
         NACOS_CACHE_DIR=str(tmp_path / "cache"),
         NACOS_LOG_DIR=str(tmp_path / "logs"),
     )
     client = AsyncMock()
-    client.get_config.return_value = ""
-    if unavailable:
-        client.get_config.side_effect = RuntimeError("Remote configuration is unavailable")
+    if isinstance(content, RuntimeError):
+        client.get_config.side_effect = content
+    else:
+        client.get_config.return_value = content
     monkeypatch.setattr(
         nacos.NacosConfigService, "create_config_service", AsyncMock(return_value=client)
     )
     integration = nacos.NacosIntegration(config)
     try:
-        with pytest.raises(RuntimeError, match="unavailable"):
+        exception_type = ValueError if error == "valid YAML" else RuntimeError
+        with pytest.raises(exception_type, match=error):
             await integration.load_remote_config()
+        assert client.get_config.await_count == attempts
     finally:
         await integration.shutdown()
 

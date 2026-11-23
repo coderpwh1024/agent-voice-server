@@ -19,7 +19,7 @@ nacos-cli skill-describe manage-user-images
 nacos-cli skill-release manage-user-images --version 1.0.0
 ```
 
-将以下片段合并到已有 `agent-service-toolkit.yaml`。确认 `image.enabled` 已启用，发布配置后重启后端。`version` 优先于 `label`，省略 `version` 时默认使用 `latest`。
+将以下片段合并到 Nacos 主配置 `agent-voice.yaml`。确认 `image.enabled` 已启用，发布配置后重启后端。`version` 优先于 `label`，省略 `version` 时默认使用 `latest`。
 
 ```yaml
 skills:

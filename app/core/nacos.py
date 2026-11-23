@@ -33,6 +33,12 @@ from app.schemas.prompts import Mem0Prompts
 logger = logging.getLogger(__name__)
 
 
+_CONFIG_DATA_ID_FALLBACKS = {
+    "agent-voice.yaml": "agent-service-toolkit.yaml",
+    "agent-service-toolkit.yaml": "agent-voice.yaml",
+}
+
+
 _NACOS_BOOTSTRAP_FIELDS = {
     "APP_ENV",
     "GRACEFUL_SHUTDOWN_TIMEOUT",
@@ -526,7 +532,8 @@ class NacosIntegration:
             if self.config.IMAGE_SKILL_ENABLED:
                 raise ValueError("图像技能需要启用 Nacos Skill 管理")
             return
-        if not self.config.NACOS_CONFIG_DATA_ID:
+        data_id = self.config.NACOS_CONFIG_DATA_ID
+        if not data_id:
             if self.config.NACOS_STORAGE_CONFIG_REQUIRED:
                 raise RuntimeError(
                     "NACOS_CONFIG_DATA_ID is required when Nacos storage configuration is mandatory"
@@ -536,17 +543,20 @@ class NacosIntegration:
             return
 
         self.config_client = await NacosConfigService.create_config_service(self._client_config())
-        content = await self.config_client.get_config(
-            ConfigParam(
-                data_id=self.config.NACOS_CONFIG_DATA_ID,
-                group=self.config.NACOS_GROUP_NAME,
+        group = self.config.NACOS_GROUP_NAME
+        content = await self.config_client.get_config(ConfigParam(data_id=data_id, group=group))
+        fallback_id = _CONFIG_DATA_ID_FALLBACKS.get(data_id)
+        if not content and fallback_id:
+            logger.warning(
+                "Nacos configuration %s/%s was not returned, trying %s",
+                group,
+                data_id,
+                fallback_id,
             )
-        )
+            data_id = fallback_id
+            content = await self.config_client.get_config(ConfigParam(data_id=data_id, group=group))
         if not content:
-            raise RuntimeError(
-                f"Nacos configuration {self.config.NACOS_GROUP_NAME}/"
-                f"{self.config.NACOS_CONFIG_DATA_ID} is empty or unavailable"
-            )
+            raise RuntimeError(f"Nacos configuration {group}/{data_id} is empty or unavailable")
         required_fields = (
             _REMOTE_STORAGE_FIELDS if self.config.NACOS_STORAGE_CONFIG_REQUIRED else None
         )
@@ -555,7 +565,12 @@ class NacosIntegration:
             content,
             required_fields=required_fields,
         )
-        logger.info("Applied Nacos startup configuration fields: %s", ", ".join(updated))
+        logger.info(
+            "Applied Nacos startup configuration %s/%s fields: %s",
+            group,
+            data_id,
+            ", ".join(updated),
+        )
         await self.load_remote_prompts()
         await self.load_remote_skills()
 

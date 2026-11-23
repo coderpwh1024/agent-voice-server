@@ -11,7 +11,7 @@ git clone git@github.com:coderpwh1024/agent-voice-server.git
 cd agent-voice-server
 ```
 
-项目原名为 `agent-service-toolkit`。为兼容现有部署，Nacos 的 `agent-service-toolkit.yaml` Data ID、服务注册名、缓存目录和 PostgreSQL application name 继续使用原值；登录令牌的签发者与受众也保持原协议，无需迁移配置中心或重新登录。Compose 显式保留原项目名 `agent-service-toolkit`，继续使用现有 PostgreSQL、Redis 数据卷；已有 `-p` 或 `COMPOSE_PROJECT_NAME` 配置仍优先。新生成的部署包与安装目录示例使用 `agent-voice-server`，systemd 单元名和服务账号沿用原值；已有 Linux 部署升级前需按实际安装路径调整单元文件。
+项目原名为 `agent-service-toolkit`。Nacos 主配置的默认 Data ID 为 `agent-voice.yaml`，兼容旧 Data ID `agent-service-toolkit.yaml`。服务注册名、缓存目录和 PostgreSQL application name 沿用原值，登录令牌继续使用原签发者与受众。Compose 显式保留原项目名 `agent-service-toolkit`，继续使用现有 PostgreSQL、Redis 数据卷；已有 `-p` 或 `COMPOSE_PROJECT_NAME` 配置仍优先。新生成的部署包与安装目录示例使用 `agent-voice-server`，systemd 单元名和服务账号沿用原值；已有 Linux 部署升级前需按实际安装路径调整单元文件。
 
 项目只运行一个 Mem0 主 Agent，内部实现为 `mem0_chat`，现有对外标识 `mem0-chatbot` 保持不变。它负责日常对话、用户长期记忆、邮件 Skill、视频 Skill、语音图像生成与编辑，以及按需加载的高德地图 MCP 查询；研究、RAG、Supervisor、GitHub MCP 及 `chatbot` 的独立实现和注册均已移除。旧 `chatbot` 请求值只在 API 边界解析到主 Agent，已有 App 无需修改 URL 或参数。
 
@@ -197,7 +197,7 @@ uv run streamlit run streamlit_app.py
 
 百炼聊天与 Mem0 提取默认使用正式版 `qwen4-max`，仍支持显式选择 `qwen3.8-max`。
 千问模型、百炼接入参数和语音供应商配置统一维护在 Nacos
-`agent-service-toolkit.yaml` 的 `models.dashscope` 中。以下片段应合并到现有文档，保留
+`agent-voice.yaml` 的 `models.dashscope` 中。以下片段应合并到现有文档，保留
 原有认证、存储、音色和其他业务配置：
 
 ```yaml
@@ -226,7 +226,14 @@ models:
 继续使用 `models.chat.enable_thinking` 和 `voice.llm.enable_thinking`。
 
 `local` 和 `test` 的标准启动配置默认启用 Nacos。启动时先读取上述文档，再初始化模型、
-记忆和语音服务；远端显式配置覆盖本地同名设置，文档为空或读取失败时启动失败。
+记忆和语音服务。远端显式配置覆盖本地同名设置。可以用 `NACOS_CONFIG_DATA_ID` 指定
+Data ID。请求 `agent-voice.yaml` 或 `agent-service-toolkit.yaml` 时，若 Nacos 未返回内容，
+服务会在同一命名空间和分组尝试另一个 Data ID。读取异常、配置校验失败或两个 Data ID 均
+无内容时启动失败。Prompt 和 Skill 发布、版本与标签由独立的 Nacos AI 管理接口处理。
+迁移 Data ID 时，用 `nacos-cli config-get` 取得旧配置正文，并在同一命名空间和分组内用
+`nacos-cli config-set --file` 按原文发布到 `agent-voice.yaml`。回读核对正文后重启后端。
+仍显式使用旧 Data ID 的部署可以在迁移期间继续读取旧配置。
+
 未指定的字段保留兼容默认值。旧顶层 `DEFAULT_MODEL`、`MEM0_*`、`VOICE_REALTIME_*`，
 以及旧 `memory.mem0` 模型字段、`voice.realtime` 和 `video.api_base_url` 路径仍可加载；
 同一字段使用新旧路径时必须值相同，否则拒绝应用整份配置。
@@ -236,7 +243,7 @@ models:
 具体地域和账号权限以[官方模型说明](https://help.aliyun.com/zh/model-studio/qwen4-max)为准。
 
 主 Agent 收到地图相关请求时，通过 MCP Python SDK 直连高德官方 Streamable HTTP 服务。
-应用启动时从 Nacos `agent-service-toolkit.yaml` 读取 `mcp.amap_maps.url` 和 `key`。
+应用启动时从 Nacos 主配置 `agent-voice.yaml` 读取 `mcp.amap_maps.url` 和 `key`。
 Key 使用 `SecretStr` 存储，客户端按官方协议将其作为 `key` 查询参数发送。
 [高德官方接入文档](https://lbs.amap.com/api/mcp-server/gettingstarted)
 

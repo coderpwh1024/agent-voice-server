@@ -4,7 +4,7 @@
 
 ## 部署
 
-将以下片段合并到 Nacos `agent-service-toolkit.yaml`。`api_base_url` 使用与 API Key 同地域、同业务空间的百炼地址。专用 Key 可放在 `models.dashscope.image.api_key`，省略时复用 `models.dashscope.api_key`。上传和结果转存共用现有 `storage.qiniu` 配置，`storage.files.enabled` 控制参考图上传。[百炼图像异步 API](https://docs.bailian.console.aliyun.com/zh/model-studio/qwen-image-generation-and-editing-api-reference)
+将以下片段合并到 Nacos 主配置 `agent-voice.yaml`。`api_base_url` 使用与 API Key 同地域、同业务空间的百炼地址。专用 Key 可放在 `models.dashscope.image.api_key`，省略时复用 `models.dashscope.api_key`。上传和结果转存共用现有 `storage.qiniu` 配置，`storage.files.enabled` 控制参考图上传。[百炼图像异步 API](https://docs.bailian.console.aliyun.com/zh/model-studio/qwen-image-generation-and-editing-api-reference)
 
 ```yaml
 models:
