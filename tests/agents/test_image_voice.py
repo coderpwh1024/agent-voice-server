@@ -10,7 +10,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from app.core import settings as app_settings
 from app.core.skills import IMAGE_SKILL_NAME, SkillDefinition
 from app.models.image import ImageEditLimitError
-from app.schemas.image import ImageStatus, ImageTask
+from app.schemas.image import ImageListQuery, ImageStatus, ImageTask, ImageTaskPage
 from app.services.skills import image_voice
 
 agent_module = importlib.import_module("app.agents.mem0_chat")
@@ -62,7 +62,7 @@ def user_input(text: str, turn: str = "one") -> dict:
 def setup(monkeypatch):
     model = Mock(ainvoke=AsyncMock(return_value=AIMessage(content="普通回复")))
     model.bind_tools.return_value = model
-    service = Mock(create=AsyncMock(), query=AsyncMock())
+    service = Mock(create=AsyncMock(), query=AsyncMock(), list_tasks=AsyncMock())
     memory = Mock(search=AsyncMock(return_value=[]), remember=AsyncMock())
     monkeypatch.setattr(agent_module, "get_model", lambda *_args, **_kwargs: model)
     monkeypatch.setattr(agent_module, "get_mem0_service", lambda: memory)
@@ -153,6 +153,8 @@ async def test_voice_edits_use_saved_target_and_stop_when_limit_reached(setup):
     ]
     detail = await graph.ainvoke(user_input("查一下十二号图片的状态"), config())
     assert detail["messages"][0].response_metadata["image"]["image_url"].endswith("/art.png")
+    assert "纸艺风景" in detail["messages"][0].content
+    assert "生成描述为：测试图像" in detail["messages"][0].content
     service.query.assert_awaited_once_with(12, 7)
     await graph.ainvoke(user_input("这张图的背景换成蓝色", "two"), config())
     stopped = await graph.ainvoke(user_input("这张图的背景换成灰色", "three"), config())
@@ -160,6 +162,76 @@ async def test_voice_edits_use_saved_target_and_stop_when_limit_reached(setup):
     assert stopped["messages"][0].response_metadata["execution"]["status"] == "failed"
     assert [call.kwargs["source_image_id"] for call in service.create.await_args_list] == [12, 13]
     assert model.ainvoke.await_count == 3
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("transcript", "term", "field"),
+    [
+        ("我想看标题叫远山的图片", "远山", "title"),
+        ("看看有没有画着蓝色小船的图片", "蓝色小船", "content"),
+    ],
+)
+async def test_voice_search_shows_single_match_and_details(setup, transcript, term, field):
+    graph, model, service, _ = setup
+    model.ainvoke.return_value = operation("search", query=term, search_field=field)
+    task = image_task(12, ImageStatus.SUCCEEDED).model_copy(update={"size": "1024*768"})
+    service.list_tasks.return_value = ImageTaskPage(
+        items=[task], total=1, page=1, page_size=6, total_pages=1
+    )
+    result = await graph.ainvoke(user_input(transcript), config())
+    answer = result["messages"][0]
+    assert "1024 乘 768" in answer.content
+    assert answer.response_metadata["execution"]["image"]["id"] == 12
+    service.list_tasks.assert_awaited_once_with(
+        7, ImageListQuery(q=term, search_field=field, page_size=6)
+    )
+    service.create.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_voice_search_publishes_ordered_results_and_requires_a_follow_up_id(setup):
+    graph, model, service, _ = setup
+    model.ainvoke.side_effect = [
+        operation("search", query="远山"),
+        operation("detail"),
+    ]
+    service.list_tasks.return_value = ImageTaskPage(
+        items=[image_task(i, ImageStatus.SUCCEEDED) for i in range(18, 12, -1)],
+        total=8,
+        page=1,
+        page_size=6,
+        total_pages=2,
+    )
+    events = [
+        event.content[0]
+        async for event in graph.astream(
+            user_input("找找远山的图片"), config(), stream_mode="custom"
+        )
+    ]
+    result = next(event for event in events if event["type"] == "image.list")
+    assert [item["id"] for item in result["items"]] == list(range(18, 12, -1))
+    final = events[-1]
+    assert final["type"] == "execution.progress"
+    assert final["image_results"] == {"items": result["items"], "total": 8}
+    assert "8 张" in final["text"] and "6 张" in final["text"]
+    follow_up = await graph.ainvoke(user_input("这张图的详情", "two"), config())
+    assert follow_up["messages"][0].response_metadata["image_status"] == "clarification"
+    service.query.assert_not_awaited()
+    service.create.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_voice_search_reports_no_results_without_a_fabricated_image(setup):
+    graph, model, service, _ = setup
+    model.ainvoke.return_value = operation("search", query="蓝色小船")
+    service.list_tasks.return_value = ImageTaskPage(
+        items=[], total=0, page=1, page_size=6, total_pages=0
+    )
+    result = await graph.ainvoke(user_input("展示蓝色小船的图片"), config())
+    data = result["messages"][0].response_metadata
+    assert data["image_status"] == "not_found"
+    assert "image" not in data["execution"] and "image_results" not in data["execution"]
 
 
 @pytest.mark.asyncio
@@ -175,6 +247,18 @@ async def test_voice_edits_use_saved_target_and_stop_when_limit_reached(setup):
         ),
         ("请生成一张图片", config(), AIMessage(content="虚构的图片"), "clarification"),
         ("请生成一张图片", config(), TimeoutError(), "timeout"),
+        (
+            "查一下标题叫去掉背景的图片",
+            config(),
+            operation("edit", image_id=12, prompt="去掉背景"),
+            "clarification",
+        ),
+        (
+            "查找蓝色小船的图片",
+            config(),
+            operation("search", query="其他标题"),
+            "clarification",
+        ),
         ("请生成一张图片", config(authenticated="8"), AIMessage(content="普通回复"), None),
         ("请生成一张图片", config(voice=False), AIMessage(content="普通回复"), None),
     ],
@@ -188,3 +272,4 @@ async def test_voice_requires_current_authorized_unambiguous_operation(
     assert result["messages"][0].response_metadata.get("image_status") == expected
     service.create.assert_not_awaited()
     service.query.assert_not_awaited()
+    service.list_tasks.assert_not_awaited()

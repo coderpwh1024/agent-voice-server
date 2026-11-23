@@ -17,7 +17,13 @@ from langgraph.store.base import BaseStore
 from langgraph.types import StreamWriter
 
 from app.schemas.events import CustomData
-from app.schemas.execution import ExecutionImage, ExecutionSnapshot, ExecutionStatus, ExecutionStep
+from app.schemas.execution import (
+    ExecutionImage,
+    ExecutionImageResults,
+    ExecutionSnapshot,
+    ExecutionStatus,
+    ExecutionStep,
+)
 from app.schemas.memory_commands import PendingMemoryCommand
 from app.services.messages import convert_message_content_to_string
 
@@ -187,6 +193,9 @@ class ExecutionTrace:
         image = metadata.get("image")
         if metadata.get("image_status") and isinstance(image, dict):
             self.snapshot.image = ExecutionImage.model_validate(image)
+        image_results = metadata.get("image_results")
+        if metadata.get("image_status") and isinstance(image_results, dict):
+            self.snapshot.image_results = ExecutionImageResults.model_validate(image_results)
         if response.id:
             self.snapshot.message_id = response.id
         else:

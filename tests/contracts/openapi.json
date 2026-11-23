@@ -2555,6 +2555,26 @@
               ],
               "title": "Q"
             }
+          },
+          {
+            "name": "search_field",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "title",
+                    "content"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search Field"
+            }
           }
         ],
         "responses": {
@@ -6984,6 +7004,17 @@
               }
             ],
             "title": "Error Code"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size"
           }
         },
         "type": "object",
@@ -7103,6 +7134,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/ExecutionImage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "image_results": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExecutionImageResults"
               },
               {
                 "type": "null"
@@ -7460,6 +7501,30 @@
           "captured_at"
         ],
         "title": "DeviceLocation"
+      },
+      "ExecutionImageResults": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ExecutionImage"
+            },
+            "type": "array",
+            "maxItems": 6,
+            "minItems": 1,
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "ExecutionImageResults"
       }
     },
     "securitySchemes": {

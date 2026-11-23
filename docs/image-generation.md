@@ -39,7 +39,7 @@ psql --single-transaction --set=ON_ERROR_STOP=1 \
 | `POST /files` | 用 `multipart/form-data` 的 `file` 字段上传参考图，响应 `data` 含 `id` 和七牛 `url` |
 | `POST /images` | 生成图片，支持 `prompt`、`title`、`size`、`source_file_ids` |
 | `POST /images/{image_id}/edits` | 使用已保存作品作为首张参考图，按 `prompt` 生成新作品 |
-| `GET /images` | 分页查看本人作品，参数 `page`、`page_size`、`status`、`q`。`q` 在标题和提示词中做大小写不敏感的子串匹配 |
+| `GET /images` | 分页查看本人作品，参数 `page`、`page_size`、`status`、`q`、`search_field`。`q` 在标题和提示词中做大小写不敏感的子串匹配，设 `search_field=title` 或 `content` 可限定字段 |
 | `GET /images/{image_id}` | 获取任务状态及保存后的 `image_url` |
 | `PATCH /images/{image_id}` | 更新展示标题，请求体为 `{"title":"新标题"}` |
 | `DELETE /images/{image_id}` | 逻辑删除已结束任务，返回 `{"deleted":true}` |

@@ -193,7 +193,15 @@ async def test_image_edit_chain_boundary_and_titles(repo: ImageRepository) -> No
     await service.update_metadata(old_id, 12, ImageMetadataUpdate(title="New title 中"))
     page = await service.list_tasks(12, ImageListQuery(q="NEW TITLE 中"))
     assert page.total == 1 and page.items[0].id == old_id
+    title = ImageListQuery(q="NEW TITLE 中", search_field="title")
+    content = ImageListQuery(q="山谷", search_field="content", page_size=2)
+    assert (await service.list_tasks(12, title)).total == 1
+    assert (await service.list_tasks(12, ImageListQuery(q="山谷", search_field="title"))).total == 5
+    assert (await service.list_tasks(12, content)).items[0].id == old_id
+    assert (await service.list_tasks(12, content)).total == 6
+    assert (await service.list_tasks(13, content)).total == 0
     await service.delete(old_id, 12)
+    assert (await service.list_tasks(12, title)).total == 0
     assert (await service.list_tasks(12, ImageListQuery())).total == 5
 
 

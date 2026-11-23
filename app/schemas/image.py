@@ -14,6 +14,7 @@ ImageTitle = Annotated[
     str,
     StringConstraints(strip_whitespace=True, min_length=1, max_length=200, pattern=r"^[^\x00]+$"),
 ]
+ImageSearchField = Literal["title", "content"]
 
 
 class ImageStatus(StrEnum):
@@ -96,6 +97,7 @@ class ImageListQuery(BaseModel):
     page_size: int = Field(default=20, ge=1, le=100)
     status: ImageStatus | None = None
     q: str | None = Field(default=None, min_length=1, max_length=200, pattern=r"^[^\x00]+$")
+    search_field: ImageSearchField | None = None
 
 
 class ImageTaskPage(BaseModel):

@@ -2468,6 +2468,118 @@ def test_audio_triggers_managed_video_skill_for_create_list_detail_and_edit(
     assert len(repo.records) == 4
 
 
+def test_voice_audio_streams_image_search_and_detail(voice_env, monkeypatch):
+    import importlib
+
+    import app.api.voice as voice_routes
+    from app.core.skills import IMAGE_SKILL_NAME, SkillDefinition
+    from app.schemas.image import ImageListQuery, ImageTask, ImageTaskPage
+    from app.services.image import runtime
+
+    class ImageSpeech(FakeSpeech):
+        def __init__(self, config):
+            super().__init__(config)
+            self.transcripts = iter(["找找画着蓝色小船的图片", "查看三十一号图片的详情"])
+
+        async def append_audio(self, ws, pcm):
+            transcript = next(self.transcripts)
+            await self.events.put(
+                {
+                    "type": "conversation.item.input_audio_transcription.completed",
+                    "item_id": str(uuid4()),
+                    "transcript": transcript,
+                }
+            )
+
+    class ImageModel(FakeMessagesListChatModel):
+        def bind_tools(self, tools, **kwargs):
+            return self
+
+    client, _, agents, headers = voice_env
+    module = importlib.import_module("app.agents.mem0_chat")
+    graph = module.mem0_chat.copy()
+    graph.checkpointer = MemorySaver()
+    agents["mem0-chatbot"] = graph
+    model = ImageModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[{"name": "image_voice_operation", "args": args, "id": str(uuid4())}],
+            )
+            for args in [
+                {"action": "search", "query": "蓝色小船", "search_field": "content"},
+                {"action": "detail", "image_id": 31},
+            ]
+        ]
+    )
+    picture = ImageTask(
+        id=31,
+        title="雨后河岸",
+        prompt="一艘蓝色小船靠在岸边",
+        model="qwen-image-3.0",
+        status="SUCCEEDED",
+        source_image_id=None,
+        source_file_ids=[],
+        size="1024*768",
+        image_url="https://cdn.example/image.png",
+        error_code=None,
+        create_time=datetime.now(UTC),
+        update_time=datetime.now(UTC),
+    )
+    service = Mock(
+        query=AsyncMock(return_value=picture),
+        list_tasks=AsyncMock(
+            return_value=ImageTaskPage(
+                items=[picture.model_copy(update={"id": 33}), picture],
+                total=2,
+                page=1,
+                page_size=6,
+                total_pages=1,
+            )
+        ),
+        create=AsyncMock(),
+    )
+    monkeypatch.setattr(runtime, "_service", service)
+    monkeypatch.setattr(settings, "IMAGE_SKILL_ENABLED", True)
+    monkeypatch.setattr(
+        settings,
+        "_image_skill",
+        SkillDefinition(IMAGE_SKILL_NAME, "图像管理", "已发布图像工作流", "a" * 64),
+    )
+    monkeypatch.setattr(voice_routes, "AlibabaRealtime", ImageSpeech)
+    monkeypatch.setattr(module, "get_model", lambda *_, **kwargs: model)
+    monkeypatch.setattr(module, "get_mem0_service", lambda: None)
+    auth = headers("7")
+    session = create(client, auth, agent_id="mem0-chatbot")
+    with connect(client, session, auth) as ws:
+        connection = configure(ws)["connection_id"]
+        for sequence, event_type in enumerate(["image.list", "image.task"]):
+            ws.send_bytes(
+                encode_audio(b"\0\0" * 320, connection, str(ZERO_UUID), 0, sequence, kind=1)
+            )
+            seen = read_until(ws, "response.done")
+            assert any(item["type"] == "audio" for item in seen)
+            spoken = "".join(item["text"] for item in seen if item["type"] == "text.delta")
+            data = next(
+                item["data"]
+                for item in seen
+                if item["type"] == "agent.custom" and item["data"]["type"] == event_type
+            )
+            if sequence == 0:
+                assert "2 张" in spoken and [item["id"] for item in data["items"]] == [33, 31]
+            else:
+                assert "雨后河岸" in spoken and "蓝色小船" in spoken
+                assert data["image"]["image_url"] == "https://cdn.example/image.png"
+            event(ws, "playback.finished", response_id=seen[-1]["response_id"])
+        event(ws, "session.close")
+        read_until(ws, "session.closed")
+    service.list_tasks.assert_awaited_once_with(
+        7, ImageListQuery(q="蓝色小船", search_field="content", page_size=6)
+    )
+    service.query.assert_awaited_once_with(31, 7)
+    service.create.assert_not_awaited()
+
+
 def test_execution_snapshots_recover_with_thread_authorization(voice_env, monkeypatch):
     import importlib
 

@@ -77,10 +77,15 @@ def test_rest_routes_bind_identity_and_return_public_image_metadata(service: Asy
     assert data == task.model_dump(mode="json")
     service.query.assert_awaited_once_with(42, 12)
 
-    listing = client.get("/images?page_size=10&status=SUCCEEDED&q=山谷", headers=headers)
+    listing = client.get(
+        "/images?page_size=10&status=SUCCEEDED&q=山谷&search_field=title", headers=headers
+    )
     assert listing.status_code == 200 and listing.json()["data"]["items"] == [data]
     service.list_tasks.assert_awaited_once_with(
-        12, ImageListQuery.model_validate({"status": "SUCCEEDED", "q": "山谷", "page_size": 10})
+        12,
+        ImageListQuery.model_validate(
+            {"status": "SUCCEEDED", "q": "山谷", "page_size": 10, "search_field": "title"}
+        ),
     )
 
     renamed = client.patch("/images/42", headers=headers, json={"title": " 山谷 "})

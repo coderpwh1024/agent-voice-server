@@ -47,6 +47,12 @@ class ExecutionImage(BaseModel):
     image_url: str | None = None
     source_image_id: int | None = None
     error_code: str | None = None
+    size: str | None = Field(default=None, exclude_if=lambda value: value is None)
+
+
+class ExecutionImageResults(BaseModel):
+    items: list[ExecutionImage] = Field(min_length=1, max_length=6)
+    total: int = Field(ge=1)
 
 
 class ExecutionSnapshot(BaseModel):
@@ -64,6 +70,9 @@ class ExecutionSnapshot(BaseModel):
     text: str = ""
     video: dict[str, Any] | None = None
     image: ExecutionImage | None = Field(default=None, exclude_if=lambda value: value is None)
+    image_results: ExecutionImageResults | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
 
 class ExecutionList(BaseModel):

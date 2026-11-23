@@ -1,6 +1,8 @@
-# 语音生成与编辑图像
+# 语音生成、编辑与查询图像
 
 登录 App 后，在对话模式可以说「生成一张纸艺图像，画面里有一座绿色小山」。语音会播报图像编号，图像任务同时出现在图像工作室。可以说「查一下 12 号图片的状态」。等待图片完成后，在同一对话说「把这张图的背景换成蓝色」，也可以直接说图片编号。编辑会生成有独立编号的新版本。
+
+可以说「查一下十二号图片的详情」「帮我找标题叫远山的图像」或「看看有没有画着蓝色小船的图片」。按画面关键词时检索作品的生成描述。单条结果会播报标题、编号、状态、生成描述摘要与已指定的尺寸。多个结果按作品编号从新到旧展示，语音说明匹配总数，每轮最多展示六张。打开卡片可查看当前详情，或继续说出其中一个编号。查询范围为当前用户的未删除作品。
 
 ## 在 Nacos 管理 Skill
 
@@ -36,7 +38,7 @@ skills:
 
 ## 语音事件与错误
 
-已接受或查到的任务通过 WebSocket `agent.custom` 发送，事件 `data.type` 为 `image.task`。`data.image` 包含 `id`、`title`、`status`、`image_url`、`source_image_id` 和 `error_code`。`execution.progress` 及执行历史也包含可选的 `image` 字段。只有转存成功时才返回七牛地址。
+单条任务通过 WebSocket `agent.custom` 发送，事件 `data.type` 为 `image.task`。`data.image` 包含 `id`、`title`、`status`、`image_url`、`source_image_id`、`error_code` 和可选的 `size`。多条结果使用 `image.list`，携带 `items` 和 `total`。`execution.progress` 及执行历史分别使用可选的 `image` 和 `image_results` 字段。只有转存成功时才返回七牛地址。
 
 可以在图像工作室管理标题和删除作品。上传参考素材时，工作室会先请求 `POST /files`，再用返回的素材 ID 提交生成或编辑任务。
 

@@ -6,7 +6,7 @@ from typing import Any, LiteralString, cast
 
 from psycopg import AsyncConnection
 from psycopg.rows import dict_row
-from psycopg.sql import SQL
+from psycopg.sql import SQL, Composable
 from psycopg_pool import AsyncConnectionPool
 
 from app.models import SQL_DIRECTORY
@@ -187,16 +187,19 @@ class ImageRepository:
         return ImageTask.model_validate(row) if row else None
 
     async def list(self, user_id: int, query: ImageListQuery) -> ImageTaskPage:
-        filters = [SQL("user_id = %s AND is_delete = 0")]
+        filters: list[Composable] = [SQL("user_id = %s AND is_delete = 0")]
         params: list[object] = [user_id]
         if query.status is not None:
             filters.append(SQL("status = %s"))
             params.append(query.status)
         if query.q is not None:
-            filters.append(
-                SQL("(strpos(lower(title), lower(%s)) > 0 OR strpos(lower(prompt), lower(%s)) > 0)")
-            )
-            params.extend([query.q, query.q])
+            matches = []
+            if query.search_field != "content":
+                matches.append(SQL("strpos(lower(title), lower(%s)) > 0"))
+            if query.search_field != "title":
+                matches.append(SQL("strpos(lower(prompt), lower(%s)) > 0"))
+            filters.append(SQL("({})").format(SQL(" OR ").join(matches)))
+            params.extend([query.q] * len(matches))
         where = SQL(" AND ").join(filters)
         async with self.pool.connection() as conn, conn.transaction():
             await conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
