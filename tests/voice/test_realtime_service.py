@@ -167,6 +167,28 @@ class WakeSpeech(FakeSpeech):
         )
 
 
+class TimedWakeSpeech(FakeSpeech):
+    transcript = "小美小美"
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.received_samples = 0
+
+    async def append_audio(self, ws, pcm):
+        self.received_samples += len(pcm) // 2
+        if self.received_samples != 6400:
+            return
+        await self.events.put(
+            {
+                "type": "conversation.item.input_audio_transcription.completed",
+                "item_id": "quiet-wake",
+                "transcript": self.transcript,
+                "audio_start_ms": 0,
+                "audio_end_ms": 400,
+            }
+        )
+
+
 class RejectedWakeSpeech(FakeSpeech):
     async def append_audio(self, ws, pcm):
         await self.events.put(
@@ -1166,6 +1188,49 @@ def test_wake_without_command_only_speaks_greeting(voice_env, monkeypatch, trans
     assert turn.run_id is None
     assert turn.audio_status == "completed"
     assert repo.sessions[session["session_id"]].wake_status == "accepted"
+
+
+@pytest.mark.parametrize(
+    ("transcript", "sample", "accepted", "review"),
+    [
+        ("小美小美", 25, True, None),
+        ("小美小美，查询订单", 25, True, "查询订单"),
+        ("小美", 25, False, None),
+        ("小米小米", 25, False, None),
+        ("小美小美", 0, False, None),
+    ],
+)
+def test_quiet_wake_uses_real_audio_and_reviews_any_following_command(
+    voice_env, monkeypatch, transcript, sample, accepted, review
+):
+    import app.api.voice as voice_routes
+
+    client, repo, _, headers = voice_env
+    monkeypatch.setattr(settings, "VOICE_WAKE_CONFIRM_SECONDS", 2)
+    monkeypatch.setattr(settings, "VOICE_INPUT_RMS_DBFS", -55)
+    monkeypatch.setattr(TimedWakeSpeech, "transcript", transcript)
+    monkeypatch.setattr(voice_routes, "AlibabaRealtime", TimedWakeSpeech)
+    auth = headers()
+    session = create(client, auth, activation="wake_word", wake_word="小美小美")
+    with connect(client, session, auth) as ws:
+        ready = configure(ws)
+        pcm = (
+            sample.to_bytes(2, "little", signed=True) + (-sample).to_bytes(2, "little", signed=True)
+        ) * 1600
+        for seq in range(2):
+            ws.send_bytes(encode_audio(pcm, ready["connection_id"], str(ZERO_UUID), 0, seq, kind=1))
+        events = read_until(ws, "response.done" if accepted else "wake.rejected")
+        if accepted:
+            wake = next(item for item in events if item["type"] == "wake.accepted")
+            assert wake["command"] == ""
+            reviews = [item["text"] for item in events if item["type"] == "transcript.review"]
+            assert reviews == ([review] if review else [])
+            assert [turn.input_text for turn in repo.records.values()] == [""]
+            event(ws, "session.close")
+            read_until(ws, "session.closed")
+        else:
+            assert not any(item["type"] == "wake.accepted" for item in events)
+            assert not repo.records
 
 
 def test_split_wake_and_extra_calls_greet_once_and_preserve_following_command(

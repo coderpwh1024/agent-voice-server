@@ -70,12 +70,14 @@ def test_audio_evidence_tracks_energy_and_sentence_boundaries_without_retaining_
     activity = AudioActivity(-55)
     activity.append(b"\0\0" * 1600)
     activity.append(struct.pack("<h", 1000) * 1600)
-    activity.append(b"\0\0" * 1600)
+    activity.append(struct.pack("<h", 25) * 1600)
     assert activity.evidence(0, 300) == SpeechEvidence(duration_ms=300, active_ms=100)
     assert activity.evidence(90, 150) == SpeechEvidence(duration_ms=60, active_ms=50)
     assert activity.evidence(200, 300) == SpeechEvidence(duration_ms=100, active_ms=0)
+    assert activity.evidence(200, 300, rms_dbfs=-67).active_ms == 100
+    assert activity.evidence(0, 100, rms_dbfs=-67).active_ms == 0
     assert activity.evidence(0, 400).active_ms is None
-    assert all(isinstance(window[2], bool) for window in activity.windows)
+    assert all(isinstance(window[2], float) for window in activity.windows)
 
 
 def test_long_audio_keeps_bounded_measurements_and_unknown_old_evidence():

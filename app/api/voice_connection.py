@@ -37,7 +37,6 @@ from app.schemas.voice import (
     Ping,
     PlaybackFinished,
     PlaybackProgress,
-    SpeechEvidence,
     SpeechHint,
     TextInput,
     VoiceSession,
@@ -58,7 +57,7 @@ from app.services.voice.input_filter import (
 from app.services.voice.providers.alibaba_realtime import AlibabaRealtime
 from app.services.voice.providers.errors import SpeechProviderError
 from app.services.voice.speech_output import SpeechText
-from app.services.voice.wake_word import match_wake_prefix
+from app.services.voice.wake_word import WakeMatch, match_wake_prefix
 
 logger = logging.getLogger(__name__)
 
@@ -471,12 +470,30 @@ class VoiceConnection:
                 self.audio_activity.append(pcm)
                 await self.provider.append_audio(asr, pcm)
 
-    def speech_evidence(self, item_id: str, event: dict[str, Any]) -> SpeechEvidence | None:
+    def take_speech_bounds(self, item_id: str, event: dict[str, Any]) -> tuple[int, int] | None:
         start, end = self.speech_boundaries.pop(item_id, (None, None))
         start = event.get("audio_start_ms", start)
         end = event.get("audio_end_ms", end)
         if type(start) is int and type(end) is int and 0 <= start <= end:
-            return self.audio_activity.evidence(start, end)
+            return start, end
+        return None
+
+    def quiet_wake_match(self, text: str, bounds: tuple[int, int] | None) -> WakeMatch | None:
+        if not self.wake_transcript_pending or bounds is None:
+            return None
+        match = match_wake_prefix(self.wake_prefix_pending + text, self.session.wake_word or "")
+        if match is None or (not match.complete and match.command):
+            return None
+        # The local keyword detector and an exact ASR prefix provide two checks.
+        # A quiet wake can open the conversation while its command still needs review.
+        floor = max(-90.0, self.settings.VOICE_INPUT_RMS_DBFS - 12.0)
+        evidence = self.audio_activity.evidence(*bounds, rms_dbfs=floor)
+        if (
+            evidence.duration_ms >= self.settings.VOICE_INPUT_MIN_SPEECH_MS
+            and evidence.active_ms is not None
+            and evidence.active_ms >= self.settings.VOICE_INPUT_MIN_ACTIVE_MS
+        ):
+            return match
         return None
 
     async def recognize(self, asr: Any) -> None:
@@ -541,7 +558,8 @@ class VoiceConnection:
                             if self.current and self.current.response_id not in self.invalid
                             else ""
                         )
-                        evidence = self.speech_evidence(item_id, event)
+                        bounds = self.take_speech_bounds(item_id, event)
+                        evidence = self.audio_activity.evidence(*bounds) if bounds else None
                         decision = assess_voice_input(
                             text,
                             self.session.language,
@@ -549,7 +567,12 @@ class VoiceConnection:
                             evidence=evidence,
                             playback_text=playback_text,
                         )
-                        if decision.action != "accept":
+                        quiet_wake = (
+                            self.quiet_wake_match(text, bounds)
+                            if decision.reason == "insufficient_audio"
+                            else None
+                        )
+                        if decision.action != "accept" and quiet_wake is None:
                             await self.emit("transcript.final", input_id=input_id, text="")
                             if decision.action == "review" and not self.wake_transcript_pending:
                                 review = VoiceTranscriptReview.model_validate(
@@ -570,10 +593,19 @@ class VoiceConnection:
                             continue
                         await self.emit("transcript.final", input_id=input_id, text=text)
                         was_pending = self.wake_transcript_pending
-                        confirmed = await self.confirm_wake(text)
+                        confirmed = await self.confirm_wake(text, allow_command=quiet_wake is None)
                         if confirmed is None:
                             return
                         if was_pending and not self.wake_transcript_pending:
+                            if quiet_wake and not is_non_actionable_voice_text(quiet_wake.command):
+                                review = VoiceTranscriptReview.model_validate(
+                                    {
+                                        "input_id": input_id,
+                                        "text": quiet_wake.command,
+                                        "reason": "insufficient_audio",
+                                    }
+                                )
+                                await self.emit("transcript.review", **review.model_dump())
                             await self.submit(
                                 "" if is_non_actionable_voice_text(confirmed) else confirmed,
                                 input_id,
@@ -585,7 +617,7 @@ class VoiceConnection:
                     self.close_reason = "asr_finished"
                     return
 
-    async def confirm_wake(self, text: str) -> str | None:
+    async def confirm_wake(self, text: str, *, allow_command: bool = True) -> str | None:
         if not self.wake_transcript_pending:
             return text
         keyword = self.session.wake_word or ""
@@ -596,7 +628,11 @@ class VoiceConnection:
             self.wake_prefix_pending = ""
             self.session.wake_status = "accepted"
             await self.repo.save_session(self.session)
-            command = "" if is_non_actionable_voice_text(match.command) else match.command
+            command = (
+                match.command
+                if allow_command and not is_non_actionable_voice_text(match.command)
+                else ""
+            )
             await self.emit("wake.accepted", keyword=keyword, command=command)
             return command
         if match and not match.command:

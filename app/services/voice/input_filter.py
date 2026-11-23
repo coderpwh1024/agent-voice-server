@@ -63,27 +63,30 @@ class AudioActivity:
     def __init__(self, rms_dbfs: float) -> None:
         self.rms_dbfs = rms_dbfs
         self.samples = 0
-        self.windows: deque[tuple[int, int, bool]] = deque(maxlen=6000)
+        self.windows: deque[tuple[int, int, float]] = deque(maxlen=6000)
 
     def append(self, pcm: bytes) -> None:
         for offset in range(0, len(pcm), 640):
             chunk = pcm[offset : offset + 640]
             count = len(chunk) // 2
             power = sum(value * value for (value,) in struct.iter_unpack("<h", chunk))
-            rms = 10 * math.log10(power / count / 32768**2) if power else -120
+            rms = 10 * math.log10(power / count / 32768**2) if power else -120.0
             end = self.samples + count
-            self.windows.append((self.samples, end, rms >= self.rms_dbfs))
+            self.windows.append((self.samples, end, rms))
             self.samples = end
 
-    def evidence(self, start_ms: int, end_ms: int) -> SpeechEvidence:
+    def evidence(
+        self, start_ms: int, end_ms: int, *, rms_dbfs: float | None = None
+    ) -> SpeechEvidence:
         evidence = SpeechEvidence(duration_ms=end_ms - start_ms)
         start = start_ms * 16
         end = end_ms * 16
         if not self.windows or start < self.windows[0][0] or end > self.samples:
             return evidence
+        threshold = self.rms_dbfs if rms_dbfs is None else rms_dbfs
         active_samples = sum(
             max(0, min(end, window_end) - max(start, window_start))
-            for window_start, window_end, active in self.windows
-            if active and window_end > start and window_start < end
+            for window_start, window_end, rms in self.windows
+            if rms >= threshold and window_end > start and window_start < end
         )
         return evidence.model_copy(update={"active_ms": active_samples / 16})
