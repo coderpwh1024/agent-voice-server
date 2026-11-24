@@ -15,6 +15,8 @@ ImageTitle = Annotated[
     StringConstraints(strip_whitespace=True, min_length=1, max_length=200, pattern=r"^[^\x00]+$"),
 ]
 ImageSearchField = Literal["title", "content"]
+ImageLoopExit = Literal["ACCEPTED", "STOPPED"]
+ImageLoopStatus = Literal["OPEN", "PROCESSING", "EXHAUSTED", "ACCEPTED", "STOPPED"]
 
 
 class ImageStatus(StrEnum):
@@ -88,6 +90,49 @@ class ImageTask(BaseModel):
     error_code: str | None
     create_time: datetime
     update_time: datetime
+    loop_root_image_id: ImageID | None = Field(default=None, exclude_if=lambda value: value is None)
+    loop_version: int | None = Field(default=None, ge=1, exclude_if=lambda value: value is None)
+
+
+class ImageLoopClose(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    action: ImageLoopExit
+
+
+class ImageLoopState(BaseModel):
+    root_image_id: ImageID
+    used_edits: int = Field(ge=0)
+    max_edits: int = Field(ge=1)
+    status: ImageLoopStatus
+    accepted_image_id: ImageID | None
+
+
+class ImageLoop(ImageLoopState):
+    versions: list[ImageTask]
+
+
+class ImageLoopHistory(ImageLoop):
+    root_image: ImageTask
+    preview_image_id: ImageID
+    preview_image_url: HttpUrl | None
+    create_time: datetime
+    update_time: datetime
+
+
+class ImageLoopHistoryQuery(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    page: int = Field(default=1, ge=1, le=2147483647)
+    page_size: int = Field(default=10, ge=1, le=100)
+
+
+class ImageLoopHistoryPage(BaseModel):
+    items: list[ImageLoopHistory]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
 
 
 class ImageListQuery(BaseModel):

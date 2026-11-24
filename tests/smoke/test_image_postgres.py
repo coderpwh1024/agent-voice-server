@@ -19,11 +19,18 @@ from app.models.image import (
     ImageConflictError,
     ImageEditLimitError,
     ImageInputError,
+    ImageLoopProcessingError,
     ImageProgress,
 )
 from app.repositories.files import FileRepository
 from app.repositories.image import ImageRepository
-from app.schemas.image import ImageCreate, ImageListQuery, ImageMetadataUpdate, ImageStatus
+from app.schemas.image import (
+    ImageCreate,
+    ImageListQuery,
+    ImageLoopHistoryQuery,
+    ImageMetadataUpdate,
+    ImageStatus,
+)
 from app.services.files import FileService
 from app.services.image.providers import ImageProviderResult, ImageStorageError
 from app.services.image.service import ImageService
@@ -69,8 +76,8 @@ async def test_image_claims_cap_concurrency_and_fence_expired_worker(repo: Image
     service = _service(repo, provider, storage)
     body = ImageCreate(prompt="山谷")
     first, replay = await asyncio.gather(
-        service.create(12, "first", body, voice_edit_limit=5),
-        service.create(12, "first", body, voice_edit_limit=5),
+        service.create(12, "first", body, loop=True),
+        service.create(12, "first", body, loop=True),
     )
     assert first.id == replay.id
     with pytest.raises(ImageConflictError, match="幂等键"):
@@ -102,7 +109,7 @@ async def test_image_claims_cap_concurrency_and_fence_expired_worker(repo: Image
 
     await service.delete(first.id, 12)
     with pytest.raises(ImageConflictError, match="已删除"):
-        await service.create(12, "first", body, voice_edit_limit=5)
+        await service.create(12, "first", body, loop=True)
     assert (await repo.claim(1, 0)).id == other.id
 
 
@@ -157,7 +164,7 @@ async def test_image_worker_retries_archival_without_resubmitting(repo: ImageRep
             await background
 
 
-async def test_image_edit_chain_boundary_and_titles(repo: ImageRepository) -> None:
+async def test_standalone_image_edit_chain_and_titles(repo: ImageRepository) -> None:
     service = _service(repo, AsyncMock(), AsyncMock())
     old_id = None
     for turn in range(6):
@@ -166,7 +173,6 @@ async def test_image_edit_chain_boundary_and_titles(repo: ImageRepository) -> No
             f"voice-{turn}",
             ImageCreate(prompt="重绘山谷"),
             source_image_id=old_id,
-            voice_edit_limit=5,
         )
         assert task.source_image_id == old_id
         claim = await repo.claim(1, 0)
@@ -183,10 +189,6 @@ async def test_image_edit_chain_boundary_and_titles(repo: ImageRepository) -> No
         )
         old_id = task.id
 
-    with pytest.raises(ImageEditLimitError):
-        await service.create(
-            12, "voice-6", ImageCreate(prompt="上色"), source_image_id=old_id, voice_edit_limit=5
-        )
     with pytest.raises(LookupError):
         await service.create(13, "voice-5", ImageCreate(prompt="上色"), source_image_id=old_id)
 
@@ -204,6 +206,190 @@ async def test_image_edit_chain_boundary_and_titles(repo: ImageRepository) -> No
     await service.delete(old_id, 12)
     assert (await service.list_tasks(12, title)).total == 0
     assert (await service.list_tasks(12, ImageListQuery())).total == 5
+
+
+async def _save_next(repo: ImageRepository, image_id: int) -> None:
+    claim = await repo.claim(1, 0)
+    assert claim is not None and claim.id == image_id
+    assert await repo.settle(
+        claim,
+        ImageProgress(
+            status=ImageStatus.SUCCEEDED,
+            provider_task_id=f"task-{image_id}",
+            qiniu_object_key=f"images/qwen/task-{image_id}.png",
+            image_url=f"https://cdn.example.com/images/task-{image_id}.png",
+        ),
+        0,
+    )
+
+
+async def test_image_loop_counts_branches_and_keeps_versions_out_of_main_table(
+    repo: ImageRepository,
+) -> None:
+    service = _service(repo, AsyncMock(), AsyncMock())
+    body = ImageCreate(prompt="重绘山谷")
+    root = await service.create(12, "initial", body, loop=True)
+    await _save_next(repo, root.id)
+    source = root.id
+    versions = []
+    for turn in range(1, 5):
+        task = await service.create(
+            12, f"edit-{turn}", body, source_image_id=source, loop=turn == 1
+        )
+        assert task.source_image_id == source
+        assert task.loop_version == turn and task.loop_root_image_id == root.id
+        await _save_next(repo, task.id)
+        versions.append(task)
+        source = root.id if turn == 2 else task.id
+
+    last, rejected = await asyncio.gather(
+        service.create(12, "fifth", body, source_image_id=root.id),
+        service.create(12, "parallel", body, source_image_id=root.id),
+        return_exceptions=True,
+    )
+    fifth_key = "fifth"
+    if isinstance(last, ImageEditLimitError):
+        last, rejected = rejected, last
+        fifth_key = "parallel"
+    assert isinstance(rejected, ImageEditLimitError)
+    assert not isinstance(last, BaseException)
+    assert last.loop_version == 5 and last.source_image_id == root.id
+    replay = await service.create(12, fifth_key, body, source_image_id=root.id)
+    assert replay.id == last.id
+    await _save_next(repo, last.id)
+
+    with pytest.raises(ImageEditLimitError):
+        await service.create(12, "sixth", body, source_image_id=root.id, loop=True)
+    with pytest.raises(LookupError):
+        await service.create(13, "foreign", body, source_image_id=last.id, loop=True)
+    with pytest.raises(LookupError):
+        await service.query_loop(last.id, 13)
+    summary = await service.query_loop(last.id, 12)
+    assert summary.status == "EXHAUSTED" and summary.used_edits == 5
+    assert [version.loop_version for version in summary.versions] == [1, 2, 3, 4, 5]
+    assert all(version.image_url for version in summary.versions)
+    async with repo.pool.connection() as conn:
+        roots = await (await conn.execute("SELECT id FROM image_generation_tasks")).fetchall()
+    assert roots == [{"id": root.id}]
+    listing = await service.list_tasks(12, ImageListQuery(q="山谷", search_field="title"))
+    assert [item.id for item in listing.items] == [root.id]
+    await service.update_metadata(last.id, 12, ImageMetadataUpdate(title="New title 中"))
+    assert (await service.query(last.id, 12)).title == "New title 中"
+    await service.delete(last.id, 12)
+    assert (await service.query_loop(root.id, 12)).used_edits == 5
+    assert len((await service.query_loop(root.id, 12)).versions) == 4
+    with pytest.raises(ImageConflictError, match="已删除"):
+        await service.create(12, fifth_key, body, source_image_id=root.id)
+    first = versions[0].id
+    finished = await service.close_loop(first, 12, "ACCEPTED")
+    assert finished.status == "ACCEPTED" and finished.accepted_image_id == first
+    assert await service.close_loop(first, 12, "ACCEPTED") == finished
+
+
+async def test_image_loop_stop_during_processing_and_recover_without_refund(
+    repo: ImageRepository,
+) -> None:
+    service = _service(repo, AsyncMock(), AsyncMock())
+    body = ImageCreate(prompt="山谷")
+    root = await service.create(12, "root", body)
+    await _save_next(repo, root.id)
+    first = await service.create(12, "first", body, source_image_id=root.id, loop=True)
+    with pytest.raises(ImageLoopProcessingError):
+        await service.create(12, "other", body, source_image_id=root.id, loop=True)
+    with pytest.raises(ImageBusyError):
+        await service.create(12, "standalone", body)
+    with pytest.raises(ImageConflictError, match="已保存"):
+        await service.close_loop(first.id, 12, "ACCEPTED")
+    claim = await repo.claim(1, 0)
+    assert claim is not None and claim.id == first.id
+    other_user = await service.create(13, "unrelated", body)
+    assert await repo.claim(1, 0) is None
+    assert await repo.settle(claim, ImageProgress(status=ImageStatus.SUBMISSION_UNKNOWN), 0)
+    await _save_next(repo, other_user.id)
+
+    second = await service.create(12, "second", body, source_image_id=root.id, loop=True)
+    assert second.loop_version == 2
+    finished = await service.close_loop(root.id, 12, "STOPPED")
+    assert finished.status == "STOPPED" and finished.used_edits == 2
+    await _save_next(repo, second.id)
+    assert (await service.query(second.id, 12)).status == ImageStatus.SUCCEEDED
+    assert (await service.query_loop(root.id, 12)).status == "STOPPED"
+    with pytest.raises(ImageConflictError, match="已结束"):
+        await service.create(12, "after-stop", body, source_image_id=root.id)
+
+
+async def test_image_loop_history_paginates_owned_roots_and_preserves_visible_versions(
+    repo: ImageRepository,
+) -> None:
+    service = _service(repo, AsyncMock(), AsyncMock())
+    body = ImageCreate(prompt="山谷")
+    root = await service.create(12, "root", body, loop=True)
+    await _save_next(repo, root.id)
+    earlier_loop_root = await service.create(12, "another-root", body)
+    await _save_next(repo, earlier_loop_root.id)
+    standalone = await service.create(12, "standalone", body, loop=True)
+    await _save_next(repo, standalone.id)
+    foreign_root = await service.create(13, "foreign-root", body)
+    await _save_next(repo, foreign_root.id)
+    foreign_edit = await service.create(
+        13, "edit", body, source_image_id=foreign_root.id, loop=True
+    )
+    await _save_next(repo, foreign_edit.id)
+    earlier_edit = await service.create(
+        12, "earlier-edit", body, source_image_id=earlier_loop_root.id, loop=True
+    )
+    await _save_next(repo, earlier_edit.id)
+
+    edit_body = ImageCreate(prompt="换成日出", size="1024*1024")
+    first = await service.create(12, "first", edit_body, source_image_id=root.id, loop=True)
+    await _save_next(repo, first.id)
+    second = await service.create(12, "second", body, source_image_id=first.id)
+    page = await service.list_loop_history(12, ImageLoopHistoryQuery(page_size=1))
+    assert (page.total, page.page, page.page_size, page.total_pages) == (2, 1, 1, 2)
+    history = page.items[0]
+    assert history == await service.get_loop_history(root.id, 12)
+    assert history.status == "PROCESSING" and history.used_edits == 2
+    assert history.root_image.id == root.id and history.root_image.image_url
+    assert history.create_time == first.create_time
+    assert history.update_time >= second.update_time
+    assert history.preview_image_id == first.id and history.preview_image_url
+    assert [(version.id, version.source_image_id) for version in history.versions] == [
+        (first.id, root.id),
+        (second.id, first.id),
+    ]
+    assert history.versions[0].prompt == edit_body.prompt
+    assert history.versions[0].size == edit_body.size
+    assert history.versions[1].image_url is None
+
+    next_page = await service.list_loop_history(12, ImageLoopHistoryQuery(page=2, page_size=1))
+    assert [item.root_image_id for item in next_page.items] == [earlier_loop_root.id]
+    empty = await service.list_loop_history(12, ImageLoopHistoryQuery(page=3, page_size=1))
+    assert empty.items == [] and empty.total == 2
+    assert (await service.list_loop_history(14, ImageLoopHistoryQuery())).total == 0
+    for missing_root in (foreign_root.id, standalone.id, first.id):
+        with pytest.raises(LookupError):
+            await service.get_loop_history(missing_root, 12)
+
+    claim = await repo.claim(1, 0)
+    assert claim is not None and claim.id == second.id
+    assert await repo.settle(
+        claim, ImageProgress(status=ImageStatus.FAILED, error_code="PROVIDER_REJECTED"), 0
+    )
+    await service.close_loop(root.id, 12, "ACCEPTED")
+    accepted = await service.get_loop_history(root.id, 12)
+    assert accepted.status == "ACCEPTED" and accepted.accepted_image_id == root.id
+    assert accepted.preview_image_id == root.id
+    assert accepted.versions[-1].error_code == "PROVIDER_REJECTED"
+    await service.delete(first.id, 12)
+    remaining = await service.get_loop_history(root.id, 12)
+    assert remaining.create_time == first.create_time and remaining.used_edits == 2
+    assert [version.id for version in remaining.versions] == [second.id]
+    await service.delete(root.id, 12)
+    with pytest.raises(LookupError):
+        await service.get_loop_history(root.id, 12)
+    remaining_page = await service.list_loop_history(12, ImageLoopHistoryQuery())
+    assert remaining_page.total == 1
+    assert [item.root_image_id for item in remaining_page.items] == [earlier_loop_root.id]
 
 
 async def test_recent_image_query_orders_by_creation_and_keeps_ownership(repo: ImageRepository):

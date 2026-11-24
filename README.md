@@ -117,7 +117,7 @@ streamlit_app.py         开发聊天界面
 | 实时语音 | `/voice/capabilities`、`/voice/protocol`、`/voice/sessions` 与会话 WebSocket |
 | 邮件 Skill | `POST /skills/email/send` 与主 Agent 的文字 / 语音调用 |
 | 视频制作与管理 | `/videos` 现有创建、列表、详情、修改、删除接口与视频 Skill |
-| 图像工作室 | `/images` 创建、编辑、列表、详情、改名、逻辑删除与语音入口，见[图像服务](docs/image-generation.md) |
+| 图像工作室 | `/images` 创建、编辑、列表、详情、改名、逻辑删除与语音入口，见[图像服务](docs/image-generation.md)和[语音编辑 LOOP](docs/image-loop.md) |
 | 文件与记忆 | `/files`、`/memories` 现有接口 |
 | AG-UI | `POST /agui/run`、`POST /agui/{agent_id}/run` |
 

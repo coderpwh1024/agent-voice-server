@@ -86,7 +86,7 @@ COMMENT ON COLUMN image_generation_tasks.size IS '请求的图像宽*高，单�
 COMMENT ON COLUMN image_generation_tasks.source_image_id IS '编辑引用的父图，父图可逻辑删除';
 COMMENT ON COLUMN image_generation_tasks.source_file_ids IS '按输入顺序记录的用户上传文件 BIGINT ID；应用写入时验证归属与可用性';
 COMMENT ON COLUMN image_generation_tasks.source_urls IS '已验证的父图和上传素材七牛公开地址快照，按模型输入顺序存储';
-COMMENT ON COLUMN image_generation_tasks.edit_depth IS '从生成图开始的编辑链深度，语音按此值限制循环次数';
+COMMENT ON COLUMN image_generation_tasks.edit_depth IS '普通图片编辑路径的父子深度，语音 LOOP 使用独立版本计数';
 COMMENT ON COLUMN image_generation_tasks.idempotency_key IS '同一用户有效记录内唯一的提交键';
 COMMENT ON COLUMN image_generation_tasks.request_hash IS '规范化客户端请求的 SHA-256 摘要';
 COMMENT ON COLUMN image_generation_tasks.provider_task_id IS '百炼任务 ID，供应商查询窗口为 24 小时';

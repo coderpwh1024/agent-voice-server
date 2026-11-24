@@ -49,6 +49,8 @@ class ExecutionImage(BaseModel):
     error_code: str | None = None
     size: str | None = Field(default=None, exclude_if=lambda value: value is None)
     create_time: datetime | None = Field(default=None, exclude_if=lambda value: value is None)
+    loop_root_image_id: int | None = Field(default=None, exclude_if=lambda value: value is None)
+    loop_version: int | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class ExecutionImageResults(BaseModel):

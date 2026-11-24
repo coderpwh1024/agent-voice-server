@@ -100,6 +100,7 @@ _NESTED_SETTINGS: dict[str, Any] = {
         "enabled": "IMAGE_ENABLED",
         "max_active_tasks": "IMAGE_MAX_ACTIVE_TASKS",
         "max_active_tasks_per_user": "IMAGE_MAX_ACTIVE_TASKS_PER_USER",
+        "loop": {"max_edits": "IMAGE_LOOP_MAX_EDITS"},
     },
     "video": {
         "enabled": "VIDEO_ENABLED",

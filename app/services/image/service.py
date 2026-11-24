@@ -10,11 +10,16 @@ from psycopg import Error as PostgresError
 from psycopg_pool import PoolTimeout
 
 from app.core.settings import Settings
-from app.models.image import ImageClaim, ImageInputError, ImageProgress
+from app.models.image import ImageClaim, ImageEditLimitError, ImageInputError, ImageProgress
 from app.repositories.image import ImageRepository
 from app.schemas.image import (
     ImageCreate,
     ImageListQuery,
+    ImageLoop,
+    ImageLoopExit,
+    ImageLoopHistory,
+    ImageLoopHistoryPage,
+    ImageLoopHistoryQuery,
     ImageMetadataUpdate,
     ImageStatus,
     ImageTask,
@@ -62,6 +67,7 @@ class ImageService:
         self.model = config.IMAGE_MODEL
         self.max_active = config.IMAGE_MAX_ACTIVE_TASKS
         self.max_active_per_user = config.IMAGE_MAX_ACTIVE_TASKS_PER_USER
+        self.loop_max_edits = config.IMAGE_LOOP_MAX_EDITS
         self.service_account = config.AUTH_SERVICE_ACCOUNT_ID
         self.wake = asyncio.Event()
 
@@ -72,7 +78,7 @@ class ImageService:
         body: ImageCreate,
         *,
         source_image_id: int | None = None,
-        voice_edit_limit: int | None = None,
+        loop: bool = False,
     ) -> ImageTask:
         if source_image_id is not None and len(body.source_file_ids) > 2:
             raise ImageInputError("编辑原图时最多附加两张参考图片")
@@ -87,27 +93,62 @@ class ImageService:
                 self.wake.set()
             return replay
         file_urls = await self._resolve_files(user_id, body.source_file_ids)
-        task, created = await self.repo.enqueue(
-            user_id,
-            key,
-            request_hash,
-            body,
-            model=self.model,
-            file_urls=file_urls,
-            source_image_id=source_image_id,
-            voice_edit_limit=voice_edit_limit,
-            max_active_per_user=self.max_active_per_user,
-        )
+        try:
+            task, created = await self.repo.enqueue(
+                user_id,
+                key,
+                request_hash,
+                body,
+                model=self.model,
+                file_urls=file_urls,
+                source_image_id=source_image_id,
+                loop=loop,
+                loop_max_edits=self.loop_max_edits,
+                max_active_per_user=self.max_active_per_user,
+            )
+        except ImageEditLimitError:
+            logger.info(
+                "图像 LOOP 已达上限 source_image_id=%s max_edits=%s",
+                source_image_id,
+                self.loop_max_edits,
+            )
+            raise
         if created:
             logger.info(
-                "图像任务已入队 image_id=%s source_image_id=%s model=%s references=%s",
+                "图像任务已入队 image_id=%s source_image_id=%s model=%s references=%s "
+                "loop_root_image_id=%s loop_version=%s",
                 task.id,
                 source_image_id,
                 self.model,
                 len(file_urls),
+                task.loop_root_image_id,
+                task.loop_version,
             )
         self.wake.set()
         return task
+
+    async def query_loop(self, image_id: int, user_id: int) -> ImageLoop:
+        return await self.repo.get_loop(image_id, user_id, self.loop_max_edits)
+
+    async def list_loop_history(
+        self, user_id: int, query: ImageLoopHistoryQuery
+    ) -> ImageLoopHistoryPage:
+        return await self.repo.list_loop_history(user_id, query, self.loop_max_edits)
+
+    async def get_loop_history(self, root_image_id: int, user_id: int) -> ImageLoopHistory:
+        return await self.repo.get_loop_history(root_image_id, user_id, self.loop_max_edits)
+
+    async def close_loop(self, image_id: int, user_id: int, action: ImageLoopExit) -> ImageLoop:
+        loop, changed = await self.repo.close_loop(image_id, user_id, action, self.loop_max_edits)
+        if changed:
+            logger.info(
+                "图像 LOOP 已结束 root_image_id=%s action=%s used_edits=%s accepted_image_id=%s",
+                loop.root_image_id,
+                action,
+                loop.used_edits,
+                loop.accepted_image_id,
+            )
+        return loop
 
     async def _resolve_files(self, user_id: int, ids: list[int]) -> list[str]:
         if not ids:
@@ -203,11 +244,14 @@ class ImageService:
                 )
                 logger.log(
                     level,
-                    "图像任务状态 image_id=%s previous=%s status=%s code=%s",
+                    "图像任务状态 image_id=%s previous=%s status=%s code=%s "
+                    "loop_root_image_id=%s loop_version=%s",
                     task.id,
                     task.previous_status,
                     progress.status,
                     progress.error_code,
+                    task.loop_root_image_id,
+                    task.loop_version,
                 )
 
     async def _poll(self, task: ImageClaim) -> ImageProgress:

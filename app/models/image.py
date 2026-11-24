@@ -20,6 +20,12 @@ class ImageBusyError(ImageConflictError):
 
 
 class ImageEditLimitError(ImageConflictError):
+    def __init__(self, max_edits: int) -> None:
+        self.max_edits = max_edits
+        super().__init__(f"这次图像创作已达到 {max_edits} 次编辑上限")
+
+
+class ImageLoopProcessingError(ImageConflictError):
     pass
 
 

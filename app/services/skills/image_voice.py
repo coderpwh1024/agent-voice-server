@@ -21,12 +21,18 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, ValidationErro
 
 from app.core import settings
 from app.core.model_metrics import invoke_chat_model
-from app.models.image import ImageBusyError, ImageConflictError, ImageEditLimitError
+from app.models.image import (
+    ImageBusyError,
+    ImageConflictError,
+    ImageEditLimitError,
+    ImageLoopProcessingError,
+)
 from app.schemas.events import CustomData
 from app.schemas.execution import ExecutionImage, ExecutionImageResults
 from app.schemas.image import (
     ImageCreate,
     ImageListQuery,
+    ImageLoopExit,
     ImageSearchField,
     ImageStatus,
     ImageTask,
@@ -38,7 +44,6 @@ from app.services.image.service import ImageService
 
 logger = logging.getLogger(__name__)
 
-VOICE_IMAGE_EDIT_LIMIT = 5
 _SEARCH_LIMIT = 6
 _RECENT_DAYS = 3
 _CONTEXT_TTL = timedelta(minutes=10)
@@ -91,6 +96,10 @@ _ID = re.compile(
 _FOLLOW_UP_ID = re.compile(
     rf"(?:查一下|查下|查询|查|看看|看一下|看下|看|打开|显示|展示)?\s*({_NUMBER})\s*号?[。！？,.?!]*"
 )
+_ACCEPT_LOOP = re.compile(
+    rf"(?:就用|采用|定稿用)\s*(?:({_NUMBER})\s*号(?:图片|图像|图|作品)?|这张(?:图(?:片|像)?|作品))"
+)
+_STOP_LOOP = re.compile(r"(?:先不改了|停止编辑(?:这张图(?:片)?)?|结束(?:这次)?(?:图片|图像)编辑)")
 _DIGITS = {**dict(zip("零一二三四五六七八九", range(10), strict=True)), "〇": 0, "两": 2, "幺": 1}
 _UNITS = {"十": 10, "百": 100, "千": 1000, "万": 10000, "亿": 100000000}
 _RULES = """你为已认证的语音用户解析一条图片请求。只能调用一次 image_voice_operation。
@@ -180,9 +189,14 @@ class ImageVoiceSession:
             for first, second in _ID.findall(normalized)
             if 0 < (number := _image_number(first or second)) <= 2**63 - 1
         }
+        control = normalized.rstrip("。！？,.?! ")
+        accept = _ACCEPT_LOOP.fullmatch(control) if recent_id or mentions_image else None
+        stop = bool(_STOP_LOOP.fullmatch(control) and (recent_id or mentions_image or reference))
         follow_up = _FOLLOW_UP_ID.fullmatch(normalized) if candidate_ids else None
         if (_OTHER_MEDIA.search(text) and not mentions_image) or not (
-            follow_up
+            accept
+            or stop
+            or follow_up
             or (mentions_image and (create or edit or lookup or _DELETE.search(text)))
             or (recent_id and ((edit and reference) or (lookup and (explicit_ids or reference))))
         ):
@@ -193,6 +207,14 @@ class ImageVoiceSession:
         service = get_image_service()
         if service is None:
             return _reply("图像工作室暂不可用，请稍后重试。", "unavailable")
+        if accept or stop:
+            target = _image_number(accept[1]) if accept and accept[1] else recent_id
+            if not target or target > 2**63 - 1:
+                return _reply("请说出要定稿的图片编号，或先打开图片再结束编辑。", "clarification")
+            self.saved = previous
+            return await self._close_loop(
+                service, int(user_id), target, "ACCEPTED" if accept else "STOPPED"
+            )
         if _DELETE.search(text) and not edit and not lookup_request:
             return _reply("请在图像工作室删除图片。", "unsupported")
         if _NO_LOOKUP.search(text):
@@ -295,10 +317,15 @@ class ImageVoiceSession:
                 key,
                 ImageCreate(prompt=operation.prompt),
                 source_image_id=image_id if operation.action == "edit" else None,
-                voice_edit_limit=VOICE_IMAGE_EDIT_LIMIT,
+                loop=True,
             )
-        except ImageEditLimitError:
-            return _reply("这条图像编辑链已达到五次。你可以生成一张新图片，开始新一轮。", "limited")
+        except ImageEditLimitError as exc:
+            return _reply(
+                f"这次创作已达到 {exc.max_edits} 次编辑上限。可以从已保存的版本里选一张定稿。",
+                "limited",
+            )
+        except ImageLoopProcessingError:
+            return _reply("这个图像版本还在处理中，保存后可以继续编辑。", "busy")
         except ImageBusyError:
             return _reply("你的图像任务队列已满，等现有任务完成后再试。", "busy")
         except ImageConflictError:
@@ -316,6 +343,30 @@ class ImageVoiceSession:
             return _reply("图像任务状态暂未确认，请先在图像工作室查看。", "operation_failed")
 
         return await self._publish_task(task, user_id)
+
+    async def _close_loop(
+        self, service: ImageService, user_id: int, image_id: int, action: ImageLoopExit
+    ) -> AIMessage:
+        try:
+            loop = await service.close_loop(image_id, user_id, action)
+        except LookupError:
+            return _reply("没有找到这张图片，请核对图像工作室中的编号。", "not_found")
+        except ImageConflictError as exc:
+            return _reply(f"{exc}。", "conflict")
+        except (PostgresError, PoolTimeout, RuntimeError) as exc:
+            logger.error(
+                "图像 LOOP 结束失败 image_id=%s error_type=%s", image_id, type(exc).__name__
+            )
+            return _reply("暂时无法确认编辑已结束，请到图像工作室检查。", "operation_failed")
+        self.saved = None
+        payload = loop.model_dump(mode="json", exclude={"versions"})
+        CustomData(data={"type": "image.loop", "loop": payload}).dispatch(self.writer)
+        return _reply(
+            f"已采用 {loop.accepted_image_id} 号图片，编辑已结束。"
+            if action == "ACCEPTED"
+            else "这次图片编辑已结束，已提交的任务仍可查询。",
+            "succeeded",
+        )
 
     async def _lookup(
         self,
@@ -415,6 +466,8 @@ class ImageVoiceSession:
             user_id=user_id, expires_at=datetime.now(UTC) + _CONTEXT_TTL, image_id=task.id
         ).model_dump(mode="json")
         text, status = _image_result(image)
+        if image.loop_version is not None:
+            text = f"本次创作第 {image.loop_version} 次编辑。{text}"
         if detail:
             description = " ".join(task.prompt.split())
             if len(description) > 120:
@@ -460,6 +513,8 @@ def _execution_image(task: ImageTask) -> ExecutionImage:
         error_code=task.error_code,
         size=task.size,
         create_time=task.create_time,
+        loop_root_image_id=task.loop_root_image_id,
+        loop_version=task.loop_version,
     )
 
 
@@ -468,6 +523,12 @@ def _image_result(image: ExecutionImage) -> tuple[str, Literal["succeeded", "unk
     if image.status == "SUCCEEDED":
         return prefix + "图片已保存，可以打开对话中的图片。", "succeeded"
     if image.status in {"FAILED", "CANCELED"}:
+        if image.loop_version is not None:
+            return (
+                prefix
+                + f"本次未保存图片。可以查看 {image.source_image_id} 号原图，或选择其他已保存版本。",
+                "failed",
+            )
         return prefix + "任务已结束，未保存图片。可以在图像工作室查看详情。", "failed"
     if image.status == "SUBMISSION_UNKNOWN":
         return prefix + "百炼受理状态暂不确定，请在图像工作室查看原任务。", "unknown"

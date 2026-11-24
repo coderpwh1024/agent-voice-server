@@ -204,7 +204,11 @@ async def image_lifespan(app: FastAPI) -> AsyncIterator[None]:
             app.state.image_service = service
             set_image_service(service)
             worker = asyncio.create_task(service.run(), name="image-queue")
-            logger.info("图像任务队列已启动 model=%s", settings.IMAGE_MODEL)
+            logger.info(
+                "图像任务队列已启动 model=%s loop_max_edits=%s",
+                settings.IMAGE_MODEL,
+                settings.IMAGE_LOOP_MAX_EDITS,
+            )
             yield
         finally:
             app.state.image_service = None

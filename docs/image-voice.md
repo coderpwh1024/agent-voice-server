@@ -35,12 +35,14 @@ skills:
 
 1. 入口是经过认证和线程校验的语音对话。当前话语给出明确指令。用户可指定本人作品编号，或用「这张图」等说法指代当前图片。单张图片的指代在同一线程中有效 10 分钟，切换到其他话题或返回图片列表后，编辑时需重新报编号或先打开一张图片的详情。
 2. 每轮最多解析一次模型意图并提交一个异步图片任务。多项可以同时完成的改动可合成一次编辑。需要依次完成的改动，由用户等当前版本保存后发起下一轮。
-3. PostgreSQL 在提交事务中检查源图归属、七牛转存状态和编辑深度。每条语音编辑链最多追加五代，达到上限后可以从一张新生成的图片开始。已经提交的语音轮使用稳定幂等键，重复交付时复用原任务。
-4. 图片未完成、任务队列满、取消请求、参数不足或用户停止时结束当前轮。服务端的后台任务继续管理已提交的图片，App 可以查询任务详情。
+3. PostgreSQL 在同一事务中检查归属、七牛转存状态、当前版本和编辑额度。同一个根图最多提交五次编辑，从旧版继续仍占用同一个 LOOP 的额度。编辑版本写入独立表。已经提交的语音轮使用稳定幂等键，重复交付时复用原任务。
+4. 用户可以说「就用十三号图片」定稿，或在当前图像上下文说「先不改了」结束 LOOP。达上限后仍能选择已保存版本定稿。服务端继续管理已提交的图片，App 可以查询任务和版本详情。
+
+配置、表结构、部署和边界示例见 [语音图像编辑 LOOP](image-loop.md)。
 
 ## 语音事件与错误
 
-单条任务通过 WebSocket `agent.custom` 发送，事件 `data.type` 为 `image.task`。`data.image` 包含 `id`、`title`、`status`、`image_url`、`source_image_id`、`error_code` 和可选的 `size`、`create_time`。多条结果和近三天列表使用 `image.list`，携带 `items` 和 `total`。`execution.progress` 及执行历史分别使用可选的 `image` 和 `image_results` 字段。只有转存成功时才返回七牛地址。
+单条任务通过 WebSocket `agent.custom` 发送，事件 `data.type` 为 `image.task`。`data.image` 包含 `id`、`title`、`status`、`image_url`、`source_image_id`、`error_code` 和可选的 `size`、`create_time`。语音编辑版本还携带 `loop_root_image_id` 和 `loop_version`。结束 LOOP 时发送 `image.loop`。多条结果和近三天列表使用 `image.list`，携带 `items` 和 `total`。`execution.progress` 及执行历史分别使用可选的 `image` 和 `image_results` 字段。只有转存成功时才返回七牛地址。
 
 可以在图像工作室管理标题和删除作品。上传参考素材时，工作室会先请求 `POST /files`，再用返回的素材 ID 提交生成或编辑任务。
 

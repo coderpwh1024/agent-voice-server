@@ -23,11 +23,12 @@ storage:
 
 配置更新后重启服务。启动时检查应用令牌密钥、百炼模型入口、七牛配置并初始化队列表。所有副本应加载同一套配置。修改百炼业务空间、地域或 Key 前应等待现有任务结束，以便继续按原供应商身份查询。通过 [`.env.example`](../.env.example) 中的 `IMAGE_*` 变量也可配置功能。
 
-可在重启前用目标 PostgreSQL 连接执行同一脚本。脚本只在目标 schema 中创建表、索引和注释，支持重复执行。
+可在重启前用目标 PostgreSQL 连接依次执行主表和 LOOP 脚本。脚本在目标 schema 中创建所需对象，支持重复执行。
 
 ```sh
 psql --single-transaction --set=ON_ERROR_STOP=1 \
-  --file=app/models/sql/create_image_generation_tasks.sql
+  --file=app/models/sql/create_image_generation_tasks.sql \
+  --file=app/models/sql/create_image_edit_loop_versions.sql
 ```
 
 ## REST API
@@ -40,6 +41,8 @@ psql --single-transaction --set=ON_ERROR_STOP=1 \
 | `POST /images` | 生成图片，支持 `prompt`、`title`、`size`、`source_file_ids` |
 | `POST /images/{image_id}/edits` | 使用已保存作品作为首张参考图，按 `prompt` 生成新作品 |
 | `GET /images` | 分页查看本人作品，参数 `page`、`page_size`、`status`、`q`、`search_field`。`q` 在标题和提示词中做大小写不敏感的子串匹配，设 `search_field=title` 或 `content` 可限定字段 |
+| `GET /images/loops` | 分页查看本人的 LOOP 创作历史，默认每页 10 条 |
+| `GET /images/loops/{root_image_id}` | 查看某次 LOOP 的原图、编辑版本、预览和定稿状态 |
 | `GET /images/{image_id}` | 获取任务状态及保存后的 `image_url` |
 | `PATCH /images/{image_id}` | 更新展示标题，请求体为 `{"title":"新标题"}` |
 | `DELETE /images/{image_id}` | 逻辑删除已结束任务，返回 `{"deleted":true}` |
@@ -61,7 +64,7 @@ psql --single-transaction --set=ON_ERROR_STOP=1 \
 
 图像任务的删除为逻辑删除。删除后，任务从本人的列表和详情中消失。已经发布的七牛地址可能继续访问，父子版关系及底层对象保留。服务日志以任务编号和供应商请求 ID 关联处理阶段、状态和错误类型，省略提示词、签名 URL 和密钥。
 
-语音每轮最多提交一次图像操作，每条图像编辑链最多五次，详见[语音生成与编辑](image-voice.md)。
+语音每轮最多提交一次图像操作。语音 LOOP 版本存入独立表，同一个根图最多五次编辑。App 通过独立接口查看版本、继续编辑及定稿，见[语音图像编辑 LOOP](image-loop.md)。
 
 ## 验证
 

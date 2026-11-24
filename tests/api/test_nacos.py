@@ -31,6 +31,8 @@ def test_image_settings_follow_nacos_provider_and_feature_sections() -> None:
   enabled: true
   max_active_tasks: 3
   max_active_tasks_per_user: 1
+  loop:
+    max_edits: 4
 models:
   dashscope:
     image:
@@ -42,9 +44,18 @@ models:
     assert config.IMAGE_ENABLED is True
     assert config.IMAGE_MAX_ACTIVE_TASKS == 3
     assert config.IMAGE_MAX_ACTIVE_TASKS_PER_USER == 1
+    assert config.IMAGE_LOOP_MAX_EDITS == 4
     assert config.IMAGE_MODEL == "qwen-image-3.0-pro"
     assert config.IMAGE_API_BASE_URL.endswith("cn-beijing.maas.aliyuncs.com/api/v1")
     assert config.IMAGE_API_KEY == SecretStr("example-image-key")
+
+
+@pytest.mark.parametrize("max_edits", [0, 6])
+def test_given_loop_limit_must_be_in_supported_range(max_edits: int) -> None:
+    config = Settings(_env_file=None, USE_FAKE_MODEL=True)
+    with pytest.raises(ValueError, match="IMAGE_LOOP_MAX_EDITS"):
+        nacos.apply_remote_settings(config, f"image:\n  loop:\n    max_edits: {max_edits}\n")
+    assert config.IMAGE_LOOP_MAX_EDITS == 5
 
 
 def test_device_memory_settings_map_independently_of_mem0() -> None:

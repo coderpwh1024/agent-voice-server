@@ -2672,6 +2672,119 @@
         }
       }
     },
+    "/images/loops": {
+      "get": {
+        "tags": [
+          "images"
+        ],
+        "summary": "List Image Loop History",
+        "description": "List the current user's image editing history, newest loop first.",
+        "operationId": "list_image_loop_history",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 2147483647,
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 10,
+              "title": "Page Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ImageLoopHistoryPage_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/images/loops/{root_image_id}": {
+      "get": {
+        "tags": [
+          "images"
+        ],
+        "summary": "Get Image Loop History",
+        "description": "Get a recorded image editing loop by its root image ID.",
+        "operationId": "get_image_loop_history",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "root_image_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 9223372036854775807,
+              "exclusiveMinimum": 0,
+              "title": "Root Image Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ImageLoopHistory_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/images/{image_id}": {
       "get": {
         "tags": [
@@ -2808,6 +2921,185 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiResponse_dict_str__bool__"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/images/{image_id}/loop": {
+      "get": {
+        "tags": [
+          "images"
+        ],
+        "summary": "Get Image Loop",
+        "operationId": "get_image_loop",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "image_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 9223372036854775807,
+              "exclusiveMinimum": 0,
+              "title": "Image Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ImageLoop_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/images/{image_id}/loop/edits": {
+      "post": {
+        "tags": [
+          "images"
+        ],
+        "summary": "Edit Image Loop",
+        "operationId": "edit_image_loop",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "image_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 9223372036854775807,
+              "exclusiveMinimum": 0,
+              "title": "Image Id"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[a-zA-Z0-9_-]+$",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImageCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ImageTask_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/images/{image_id}/loop/close": {
+      "post": {
+        "tags": [
+          "images"
+        ],
+        "summary": "Close Image Loop",
+        "operationId": "close_image_loop",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "image_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 9223372036854775807,
+              "exclusiveMinimum": 0,
+              "title": "Image Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImageLoopClose"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ImageLoop_"
                 }
               }
             }
@@ -3209,6 +3501,34 @@
           "message"
         ],
         "title": "ApiResponse[ImageTask]"
+      },
+      "ApiResponse_ImageLoop_": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ImageLoop"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ApiResponse[ImageLoop]"
       },
       "ApiResponse_FeedbackResponse_": {
         "properties": {
@@ -4749,6 +5069,31 @@
             "type": "string",
             "format": "date-time",
             "title": "Update Time"
+          },
+          "loop_root_image_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 9.223372036854776e+18,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Loop Root Image Id"
+          },
+          "loop_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Loop Version"
           }
         },
         "type": "object",
@@ -4803,6 +5148,276 @@
           "total_pages"
         ],
         "title": "ImageTaskPage"
+      },
+      "ImageLoop": {
+        "properties": {
+          "root_image_id": {
+            "type": "integer",
+            "maximum": 9.223372036854776e+18,
+            "exclusiveMinimum": 0.0,
+            "title": "Root Image Id"
+          },
+          "used_edits": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Used Edits"
+          },
+          "max_edits": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Max Edits"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "OPEN",
+              "PROCESSING",
+              "EXHAUSTED",
+              "ACCEPTED",
+              "STOPPED"
+            ],
+            "title": "Status"
+          },
+          "accepted_image_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 9.223372036854776e+18,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accepted Image Id"
+          },
+          "versions": {
+            "items": {
+              "$ref": "#/components/schemas/ImageTask"
+            },
+            "type": "array",
+            "title": "Versions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "root_image_id",
+          "used_edits",
+          "max_edits",
+          "status",
+          "accepted_image_id",
+          "versions"
+        ],
+        "title": "ImageLoop"
+      },
+      "ImageLoopClose": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "ACCEPTED",
+              "STOPPED"
+            ],
+            "title": "Action"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "title": "ImageLoopClose"
+      },
+      "ImageLoopHistory": {
+        "properties": {
+          "root_image_id": {
+            "type": "integer",
+            "maximum": 9.223372036854776e+18,
+            "exclusiveMinimum": 0.0,
+            "title": "Root Image Id"
+          },
+          "used_edits": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Used Edits"
+          },
+          "max_edits": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Max Edits"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "OPEN",
+              "PROCESSING",
+              "EXHAUSTED",
+              "ACCEPTED",
+              "STOPPED"
+            ],
+            "title": "Status"
+          },
+          "accepted_image_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 9.223372036854776e+18,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accepted Image Id"
+          },
+          "versions": {
+            "items": {
+              "$ref": "#/components/schemas/ImageTask"
+            },
+            "type": "array",
+            "title": "Versions"
+          },
+          "root_image": {
+            "$ref": "#/components/schemas/ImageTask"
+          },
+          "preview_image_id": {
+            "type": "integer",
+            "maximum": 9.223372036854776e+18,
+            "exclusiveMinimum": 0.0,
+            "title": "Preview Image Id"
+          },
+          "preview_image_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2083,
+                "minLength": 1,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preview Image Url"
+          },
+          "create_time": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Create Time"
+          },
+          "update_time": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Update Time"
+          }
+        },
+        "type": "object",
+        "required": [
+          "root_image_id",
+          "used_edits",
+          "max_edits",
+          "status",
+          "accepted_image_id",
+          "versions",
+          "root_image",
+          "preview_image_id",
+          "preview_image_url",
+          "create_time",
+          "update_time"
+        ],
+        "title": "ImageLoopHistory"
+      },
+      "ImageLoopHistoryPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ImageLoopHistory"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          },
+          "total_pages": {
+            "type": "integer",
+            "title": "Total Pages"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size",
+          "total_pages"
+        ],
+        "title": "ImageLoopHistoryPage"
+      },
+      "ApiResponse_ImageLoopHistory_": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ImageLoopHistory"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ApiResponse[ImageLoopHistory]"
+      },
+      "ApiResponse_ImageLoopHistoryPage_": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ImageLoopHistoryPage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ApiResponse[ImageLoopHistoryPage]"
       },
       "ImageInputContent": {
         "properties": {
@@ -7027,6 +7642,28 @@
               }
             ],
             "title": "Create Time"
+          },
+          "loop_root_image_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Loop Root Image Id"
+          },
+          "loop_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Loop Version"
           }
         },
         "type": "object",

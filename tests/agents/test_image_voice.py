@@ -10,7 +10,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from app.core import settings as app_settings
 from app.core.skills import IMAGE_SKILL_NAME, SkillDefinition
 from app.models.image import ImageEditLimitError
-from app.schemas.image import ImageListQuery, ImageStatus, ImageTask, ImageTaskPage
+from app.schemas.image import ImageListQuery, ImageLoop, ImageStatus, ImageTask, ImageTaskPage
 from app.services.skills import image_voice
 
 agent_module = importlib.import_module("app.agents.mem0_chat")
@@ -160,7 +160,7 @@ async def test_voice_generation_is_idempotent_and_publishes_structured_task(setu
     assert "图像编号 12" in result["messages"][0].content
     assert service.create.await_args_list[0] == service.create.await_args_list[1]
     assert service.create.await_args.args[0] == 7
-    assert service.create.await_args.kwargs["voice_edit_limit"] == 5
+    assert service.create.await_args.kwargs["loop"] is True
     assert model.ainvoke.await_count == 2
     reference = next(
         message
@@ -208,20 +208,43 @@ async def test_voice_edits_use_saved_target_and_stop_when_limit_reached(setup):
     ]
     service.query.return_value = image_task(12, ImageStatus.SUCCEEDED)
     service.create.side_effect = [
-        image_task(13, ImageStatus.QUEUED, parent=12),
-        ImageEditLimitError("limit"),
+        image_task(13, ImageStatus.QUEUED, parent=12).model_copy(
+            update={"loop_root_image_id": 12, "loop_version": 3}
+        ),
+        ImageEditLimitError(3),
     ]
     detail = await graph.ainvoke(user_input("查一下十二号图片的状态"), config())
     assert detail["messages"][0].response_metadata["image"]["image_url"].endswith("/art.png")
     assert "纸艺风景" in detail["messages"][0].content
     assert "生成描述为：测试图像" in detail["messages"][0].content
     service.query.assert_awaited_once_with(12, 7)
-    await graph.ainvoke(user_input("这张图的背景换成蓝色", "two"), config())
+    edited = await graph.ainvoke(user_input("这张图的背景换成蓝色", "two"), config())
+    assert edited["messages"][0].response_metadata["image"]["loop_version"] == 3
     stopped = await graph.ainvoke(user_input("这张图的背景换成灰色", "three"), config())
-    assert "五次" in stopped["messages"][0].content
+    assert "3 次" in stopped["messages"][0].content
     assert stopped["messages"][0].response_metadata["execution"]["status"] == "failed"
     assert [call.kwargs["source_image_id"] for call in service.create.await_args_list] == [12, 13]
     assert model.ainvoke.await_count == 3
+
+
+@pytest.mark.asyncio
+async def test_voice_can_accept_an_explicit_loop_version_without_generating(setup):
+    graph, model, service, _ = setup
+    service.close_loop = AsyncMock(
+        return_value=ImageLoop(
+            root_image_id=12,
+            used_edits=3,
+            max_edits=5,
+            status="ACCEPTED",
+            accepted_image_id=13,
+            versions=[],
+        )
+    )
+    result = await graph.ainvoke(user_input("就用十三号图片"), config())
+    assert "已采用 13 号图片" in result["messages"][0].content
+    service.close_loop.assert_awaited_once_with(13, 7, "ACCEPTED")
+    service.create.assert_not_awaited()
+    model.ainvoke.assert_not_awaited()
 
 
 @pytest.mark.asyncio

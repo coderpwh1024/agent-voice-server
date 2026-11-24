@@ -330,6 +330,7 @@ class Settings(BaseSettings):
     IMAGE_MODEL: ImageModel = "qwen-image-3.0"
     IMAGE_MAX_ACTIVE_TASKS: int = Field(default=4, ge=1, le=32)
     IMAGE_MAX_ACTIVE_TASKS_PER_USER: int = Field(default=2, ge=1, le=10)
+    IMAGE_LOOP_MAX_EDITS: int = Field(default=5, ge=1, le=5)
     IMAGE_SKILL_ENABLED: bool = False
     IMAGE_SKILL_VERSION: str | None = Field(default=None, min_length=1)
     IMAGE_SKILL_LABEL: str = Field(default="latest", min_length=1)

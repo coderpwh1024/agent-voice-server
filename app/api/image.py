@@ -15,6 +15,11 @@ from app.schemas import ApiResponse, api_success
 from app.schemas.image import (
     ImageCreate,
     ImageListQuery,
+    ImageLoop,
+    ImageLoopClose,
+    ImageLoopHistory,
+    ImageLoopHistoryPage,
+    ImageLoopHistoryQuery,
     ImageMetadataUpdate,
     ImageTask,
     ImageTaskPage,
@@ -93,6 +98,55 @@ async def list_images(
     user_id = _user_id(request)
     with _handle_errors():
         return api_success(await _service(request).list_tasks(user_id, query))
+
+
+@router.get("/loops", response_model=ApiResponse[ImageLoopHistoryPage])
+async def list_image_loop_history(
+    request: Request, query: Annotated[ImageLoopHistoryQuery, Query()]
+) -> ApiResponse[ImageLoopHistoryPage]:
+    """List the current user's image editing history, newest loop first."""
+    user_id = _user_id(request)
+    with _handle_errors():
+        return api_success(await _service(request).list_loop_history(user_id, query))
+
+
+@router.get("/loops/{root_image_id}", response_model=ApiResponse[ImageLoopHistory])
+async def get_image_loop_history(
+    root_image_id: ImagePathID, request: Request
+) -> ApiResponse[ImageLoopHistory]:
+    """Get a recorded image editing loop by its root image ID."""
+    user_id = _user_id(request)
+    with _handle_errors():
+        return api_success(await _service(request).get_loop_history(root_image_id, user_id))
+
+
+@router.get("/{image_id}/loop", response_model=ApiResponse[ImageLoop])
+async def get_image_loop(image_id: ImagePathID, request: Request) -> ApiResponse[ImageLoop]:
+    user_id = _user_id(request)
+    with _handle_errors():
+        return api_success(await _service(request).query_loop(image_id, user_id))
+
+
+@router.post("/{image_id}/loop/edits", response_model=ApiResponse[ImageTask], status_code=202)
+async def edit_image_loop(
+    image_id: ImagePathID, body: ImageCreate, request: Request, idempotency_key: IdempotencyKey
+) -> ApiResponse[ImageTask]:
+    user_id = _user_id(request)
+    with _handle_errors():
+        return api_success(
+            await _service(request).create(
+                user_id, idempotency_key, body, source_image_id=image_id, loop=True
+            )
+        )
+
+
+@router.post("/{image_id}/loop/close", response_model=ApiResponse[ImageLoop])
+async def close_image_loop(
+    image_id: ImagePathID, body: ImageLoopClose, request: Request
+) -> ApiResponse[ImageLoop]:
+    user_id = _user_id(request)
+    with _handle_errors():
+        return api_success(await _service(request).close_loop(image_id, user_id, body.action))
 
 
 @router.get("/{image_id}", response_model=ApiResponse[ImageTask])
