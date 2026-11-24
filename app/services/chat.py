@@ -4,7 +4,6 @@ from uuid import UUID, uuid4
 
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
-from langfuse.langchain import CallbackHandler
 from langgraph.types import Command
 from langsmith import uuid7
 from pydantic import ValidationError
@@ -12,6 +11,7 @@ from pydantic import ValidationError
 from app.agents import AgentGraph
 from app.core import settings
 from app.core.exceptions import ServiceError
+from app.core.observability import langfuse_callbacks
 from app.repositories.voice import VoiceRepository
 from app.schemas import ChatMessage, UserInput
 from app.schemas.execution import MemoryConfirmation
@@ -44,13 +44,6 @@ async def build_run_input(
     if user_input.model is not None:
         ensure_model_available(user_input.model)
         configurable["model"] = user_input.model
-
-    callbacks: list[Any] = []
-    if settings.LANGFUSE_TRACING:
-        # Initialize Langfuse CallbackHandler for Langchain (tracing)
-        langfuse_handler = CallbackHandler()
-
-        callbacks.append(langfuse_handler)
 
     if user_input.agent_config:
         # Check for reserved keys (including 'model' even if not in configurable)
@@ -85,7 +78,7 @@ async def build_run_input(
         configurable=configurable,
         metadata={"user_id": user_id, "agent_id": agent_id, "execution_run_id": str(run_id)},
         run_id=run_id,
-        callbacks=callbacks,
+        callbacks=langfuse_callbacks(),
     )
 
     # Check for interrupts that need to be resumed

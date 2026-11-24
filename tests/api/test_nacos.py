@@ -23,6 +23,30 @@ def test_file_upload_settings_map_from_nacos() -> None:
     assert config.FILE_UPLOAD_MAX_BYTES == 1048576
 
 
+def test_langfuse_settings_prefer_nacos_observability_group(monkeypatch) -> None:
+    monkeypatch.setenv("LANGFUSE_BASE_URL", "https://environment.example")
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "environment-public")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "environment-secret")
+    config = Settings(_env_file=None, USE_FAKE_MODEL=True)
+    assert config.LANGFUSE_HOST == "https://environment.example/"
+
+    nacos.apply_remote_settings(
+        config,
+        """observability:
+  langfuse:
+    enabled: true
+    base_url: http://127.0.0.1:3000
+    public_key: example-public
+    secret_key: example-secret
+""",
+    )
+
+    assert config.LANGFUSE_TRACING is True
+    assert config.LANGFUSE_HOST == "http://127.0.0.1:3000/"
+    assert config.LANGFUSE_PUBLIC_KEY == SecretStr("example-public")
+    assert config.LANGFUSE_SECRET_KEY == SecretStr("example-secret")
+
+
 def test_image_settings_follow_nacos_provider_and_feature_sections() -> None:
     config = nacos.Settings(_env_file=None, USE_FAKE_MODEL=True)
     nacos.apply_remote_settings(

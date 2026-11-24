@@ -242,6 +242,24 @@ Data ID。请求 `agent-voice.yaml` 或 `agent-service-toolkit.yaml` 时，若 N
 验证，随后重启服务加载配置。现有百炼按量接口地址和 API Key 可继续使用，
 具体地域和账号权限以[官方模型说明](https://help.aliyun.com/zh/model-studio/qwen4-max)为准。
 
+Langfuse 追踪配置放在 `agent-voice.yaml` 的 `observability.langfuse` 中。用测试项目的密钥替换下面的占位值，
+通过 `nacos-cli config-set` 发布并回读，再重启 Agent 加载配置。
+
+```yaml
+observability:
+  langfuse:
+    enabled: true
+    base_url: http://127.0.0.1:3000
+    public_key: replace-with-langfuse-public-key
+    secret_key: replace-with-langfuse-secret-key
+```
+
+`base_url` 必须能从 Agent 进程访问。上例适用于与 Langfuse 同机运行的宿主机进程，
+容器部署时使用容器网络可达的地址。启动后 `/health` 的 `data.langfuse` 报告认证状态，
+可在 Langfuse 的 Tracing 页面确认 HTTP、AG-UI 和语音的 Agent 执行记录。
+关闭 Nacos 时，仍可使用 `LANGFUSE_TRACING`、`LANGFUSE_BASE_URL`（兼容 `LANGFUSE_HOST`）
+以及 `LANGFUSE_PUBLIC_KEY`、`LANGFUSE_SECRET_KEY` 作为环境变量。
+
 主 Agent 收到地图相关请求时，通过 MCP Python SDK 直连高德官方 Streamable HTTP 服务。
 应用启动时从 Nacos 主配置 `agent-voice.yaml` 读取 `mcp.amap_maps.url` 和 `key`。
 Key 使用 `SecretStr` 存储，客户端按官方协议将其作为 `key` 查询参数发送。

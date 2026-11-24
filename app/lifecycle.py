@@ -12,6 +12,7 @@ from app.agents import DEFAULT_AGENT, get_agent
 from app.core import settings
 from app.core.database import get_postgres_connection_string
 from app.core.nacos import NacosIntegration
+from app.core.observability import langfuse_lifespan
 from app.core.persistence import initialize_database, initialize_store
 from app.repositories.files import FileRepository
 from app.repositories.image import ImageRepository
@@ -42,7 +43,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await nacos.load_remote_config()
         settings.require_amap_mcp_configuration()
         # Initialize both checkpointer (for short-term memory) and store (for long-term memory)
-        async with initialize_database() as saver, initialize_store() as store:
+        async with (
+            langfuse_lifespan(),
+            initialize_database() as saver,
+            initialize_store() as store,
+        ):
             # Set up both components
             if hasattr(saver, "setup"):  # ignore: union-attr
                 await saver.setup()

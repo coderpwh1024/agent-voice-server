@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from dotenv import dotenv_values, find_dotenv
 from pydantic import (
+    AliasChoices,
     BeforeValidator,
     EmailStr,
     Field,
@@ -264,7 +265,10 @@ class Settings(BaseSettings):
     LANGCHAIN_API_KEY: SecretStr | None = None
 
     LANGFUSE_TRACING: bool = False
-    LANGFUSE_HOST: Annotated[str, BeforeValidator(check_str_is_http)] = "https://cloud.langfuse.com"
+    LANGFUSE_HOST: Annotated[str, BeforeValidator(check_str_is_http)] = Field(
+        default="https://cloud.langfuse.com",
+        validation_alias=AliasChoices("LANGFUSE_BASE_URL", "LANGFUSE_HOST"),
+    )
     LANGFUSE_PUBLIC_KEY: SecretStr | None = None
     LANGFUSE_SECRET_KEY: SecretStr | None = None
 

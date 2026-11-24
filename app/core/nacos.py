@@ -96,6 +96,14 @@ _REALTIME_MODEL_SETTINGS = {
 
 
 _NESTED_SETTINGS: dict[str, Any] = {
+    "observability": {
+        "langfuse": {
+            "enabled": "LANGFUSE_TRACING",
+            "base_url": "LANGFUSE_HOST",
+            "public_key": "LANGFUSE_PUBLIC_KEY",
+            "secret_key": "LANGFUSE_SECRET_KEY",
+        },
+    },
     "image": {
         "enabled": "IMAGE_ENABLED",
         "max_active_tasks": "IMAGE_MAX_ACTIVE_TASKS",

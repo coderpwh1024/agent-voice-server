@@ -18,12 +18,12 @@ from ag_ui_langgraph import LangGraphAgent
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from langchain_core.runnables import RunnableConfig
-from langfuse.langchain import CallbackHandler
 from pydantic import ValidationError
 
 from app.agents import DEFAULT_AGENT, AgentGraph
 from app.api.dependencies import get_agent, repository
 from app.core import settings
+from app.core.observability import langfuse_callbacks
 from app.repositories.voice import VoiceRepository
 from app.schemas.local_memory import LocalMemoryContext
 from app.schemas.location import DeviceLocation
@@ -73,10 +73,6 @@ def _base_config(input_data: RunAgentInput, agent_id: str) -> RunnableConfig:
     if (model := configurable.get("model")) is not None:
         ensure_model_available(model)
 
-    callbacks: list[Any] = []
-    if settings.LANGFUSE_TRACING:
-        callbacks.append(CallbackHandler())
-
     configurable = dict(configurable)
     user_id = configurable.setdefault("user_id", str(uuid4()))
 
@@ -84,7 +80,7 @@ def _base_config(input_data: RunAgentInput, agent_id: str) -> RunnableConfig:
         configurable=configurable,
         # Recorded in checkpoint metadata so AG-UI threads show up in /threads too.
         metadata={"user_id": user_id, "agent_id": agent_id, "execution_run_id": input_data.run_id},
-        callbacks=callbacks,
+        callbacks=langfuse_callbacks(),
     )
 
 
