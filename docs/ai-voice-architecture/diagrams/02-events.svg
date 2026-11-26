@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="532" viewBox="0 0 880 532" role="img">
+<title>统一 Agent 执行与事件出口</title>
+<rect x="2" y="2" width="876" height="528" rx="18" fill="#F4F7FB" stroke="#CDD9E7"/>
+<rect x="20" y="22" width="5" height="50" rx="2" fill="#3169D1" stroke="none"/>
+<text x="40" y="46" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="30" font-weight="700" fill="#16243B" text-anchor="start">统一 Agent 执行与事件出口</text>
+<text x="41" y="74" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="17" font-weight="400" fill="#465A75" text-anchor="start">三类传输共享线程、运行参数和核心 Agent</text>
+<line x1="24" y1="94" x2="856" y2="94" stroke="#CDD9E7" stroke-width="1"/>
+<rect x="25.0" y="111" width="256.6666666666667" height="33" rx="8" fill="#E9F2FF" stroke="none"/>
+<text x="39.0" y="134" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="17" font-weight="700" fill="#194FAD" text-anchor="start">入口</text>
+<rect x="25.0" y="158" width="256.6666666666667" height="90" rx="11" fill="#FFFFFF" stroke="#CDD9E7"/>
+<rect x="37.0" y="171" width="5" height="64" rx="2" fill="#194FAD" stroke="none"/>
+<text x="52.0" y="194" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="21" font-weight="700" fill="#194FAD" text-anchor="start">HTTP / SSE</text>
+<text x="52.0" y="221" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="16" font-weight="400" fill="#465A75" text-anchor="start">/invoke、/stream</text>
+<rect x="25.0" y="272" width="256.6666666666667" height="90" rx="11" fill="#FFFFFF" stroke="#CDD9E7"/>
+<rect x="37.0" y="285" width="5" height="64" rx="2" fill="#194FAD" stroke="none"/>
+<text x="52.0" y="308" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="21" font-weight="700" fill="#194FAD" text-anchor="start">AG-UI</text>
+<text x="52.0" y="335" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="16" font-weight="400" fill="#465A75" text-anchor="start">/agui/run</text>
+<rect x="25.0" y="386" width="256.6666666666667" height="90" rx="11" fill="#FFFFFF" stroke="#CDD9E7"/>
+<rect x="37.0" y="399" width="5" height="64" rx="2" fill="#194FAD" stroke="none"/>
+<text x="52.0" y="422" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="21" font-weight="700" fill="#194FAD" text-anchor="start">语音 WebSocket</text>
+<text x="52.0" y="449" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="16" font-weight="400" fill="#465A75" text-anchor="start">ASR 文本或 input.text</text>
+<rect x="311.6666666666667" y="111" width="256.6666666666667" height="33" rx="8" fill="#E4F5F0" stroke="none"/>
+<text x="325.6666666666667" y="134" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="17" font-weight="700" fill="#126858" text-anchor="start">执行</text>
+<rect x="311.6666666666667" y="158" width="256.6666666666667" height="90" rx="11" fill="#FFFFFF" stroke="#CDD9E7"/>
+<rect x="323.6666666666667" y="171" width="5" height="64" rx="2" fill="#126858" stroke="none"/>
+<text x="338.6666666666667" y="194" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="21" font-weight="700" fill="#126858" text-anchor="start">绑定执行身份</text>
+<text x="338.6666666666667" y="221" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="16" font-weight="400" fill="#465A75" text-anchor="start">用户、线程、模型、run_id</text>
+<line x1="440.0" y1="248" x2="440.0" y2="267" stroke="#126858" stroke-width="2"/>
+<polygon points="440.0,270 435.0,260 445.0,260" fill="#126858"/>
+<rect x="311.6666666666667" y="272" width="256.6666666666667" height="90" rx="11" fill="#FFFFFF" stroke="#CDD9E7"/>
+<rect x="323.6666666666667" y="285" width="5" height="64" rx="2" fill="#126858" stroke="none"/>
+<text x="338.6666666666667" y="308" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="21" font-weight="700" fill="#126858" text-anchor="start">LangGraph</text>
+<text x="338.6666666666667" y="335" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="16" font-weight="400" fill="#465A75" text-anchor="start">构建运行参数与标准事件</text>
+<line x1="440.0" y1="362" x2="440.0" y2="381" stroke="#126858" stroke-width="2"/>
+<polygon points="440.0,384 435.0,374 445.0,374" fill="#126858"/>
+<rect x="311.6666666666667" y="386" width="256.6666666666667" height="90" rx="11" fill="#FFFFFF" stroke="#CDD9E7"/>
+<rect x="323.6666666666667" y="399" width="5" height="64" rx="2" fill="#126858" stroke="none"/>
+<text x="338.6666666666667" y="422" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="21" font-weight="700" fill="#126858" text-anchor="start">业务分流</text>
+<text x="338.6666666666667" y="449" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="16" font-weight="400" fill="#465A75" text-anchor="start">邮件、图像、记忆、视频和地图</text>
+<rect x="598.3333333333334" y="111" width="256.6666666666667" height="33" rx="8" fill="#F0EBFC" stroke="none"/>
+<text x="612.3333333333334" y="134" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="17" font-weight="700" fill="#5D429E" text-anchor="start">交付与恢复</text>
+<rect x="598.3333333333334" y="158" width="256.6666666666667" height="90" rx="11" fill="#FFFFFF" stroke="#CDD9E7"/>
+<rect x="610.3333333333334" y="171" width="5" height="64" rx="2" fill="#5D429E" stroke="none"/>
+<text x="625.3333333333334" y="194" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="21" font-weight="700" fill="#5D429E" text-anchor="start">实时响应</text>
+<text x="625.3333333333334" y="221" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="16" font-weight="400" fill="#465A75" text-anchor="start">完整响应、增量文字、结构事件</text>
+<rect x="598.3333333333334" y="272" width="256.6666666666667" height="90" rx="11" fill="#FFFFFF" stroke="#CDD9E7"/>
+<rect x="610.3333333333334" y="285" width="5" height="64" rx="2" fill="#5D429E" stroke="none"/>
+<text x="625.3333333333334" y="308" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="21" font-weight="700" fill="#5D429E" text-anchor="start">语音交付</text>
+<text x="625.3333333333334" y="335" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="16" font-weight="400" fill="#465A75" text-anchor="start">文字 + PCM + 播放确认</text>
+<rect x="598.3333333333334" y="386" width="256.6666666666667" height="90" rx="11" fill="#FFFFFF" stroke="#CDD9E7"/>
+<rect x="610.3333333333334" y="399" width="5" height="64" rx="2" fill="#5D429E" stroke="none"/>
+<text x="625.3333333333334" y="422" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="21" font-weight="700" fill="#5D429E" text-anchor="start">历史恢复</text>
+<text x="625.3333333333334" y="449" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="16" font-weight="400" fill="#465A75" text-anchor="start">检查点、执行快照、语音轮次</text>
+<line x1="283.6666666666667" y1="207" x2="306.6666666666667" y2="207" stroke="#126858" stroke-width="2"/>
+<polygon points="309.6666666666667,207 299.6666666666667,202 299.6666666666667,212" fill="#126858"/>
+<line x1="283.6666666666667" y1="321" x2="306.6666666666667" y2="321" stroke="#126858" stroke-width="2"/>
+<polygon points="309.6666666666667,321 299.6666666666667,316 299.6666666666667,326" fill="#126858"/>
+<line x1="283.6666666666667" y1="435" x2="306.6666666666667" y2="435" stroke="#126858" stroke-width="2"/>
+<polygon points="309.6666666666667,435 299.6666666666667,430 299.6666666666667,440" fill="#126858"/>
+<line x1="570.3333333333334" y1="207" x2="593.3333333333334" y2="207" stroke="#5D429E" stroke-width="2"/>
+<polygon points="596.3333333333334,207 586.3333333333334,202 586.3333333333334,212" fill="#5D429E"/>
+<line x1="570.3333333333334" y1="321" x2="593.3333333333334" y2="321" stroke="#5D429E" stroke-width="2"/>
+<polygon points="596.3333333333334,321 586.3333333333334,316 586.3333333333334,326" fill="#5D429E"/>
+<line x1="570.3333333333334" y1="435" x2="593.3333333333334" y2="435" stroke="#5D429E" stroke-width="2"/>
+<polygon points="596.3333333333334,435 586.3333333333334,430 586.3333333333334,440" fill="#5D429E"/>
+<rect x="25" y="475" width="830" height="36" rx="8" fill="#E7EEF8" stroke="none"/>
+<text x="42" y="499" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="17" font-weight="600" fill="#16243B" text-anchor="start">标识职责：thread_id 串联上下文，run_id 串联执行，response_id 串联语音输出。</text>
+</svg>

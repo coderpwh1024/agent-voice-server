@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="532" viewBox="0 0 880 532" role="img">
+<title>图片生成队列与多轮编辑</title>
+<rect x="2" y="2" width="876" height="528" rx="18" fill="#F4F7FB" stroke="#CDD9E7"/>
+<rect x="20" y="22" width="5" height="50" rx="2" fill="#3169D1" stroke="none"/>
+<text x="40" y="46" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="30" font-weight="700" fill="#16243B" text-anchor="start">图片生成队列与多轮编辑</text>
+<text x="41" y="74" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="17" font-weight="400" fill="#465A75" text-anchor="start">同一图像服务处理生成、编辑、状态和作品历史</text>
+<line x1="24" y1="94" x2="856" y2="94" stroke="#CDD9E7" stroke-width="1"/>
+<rect x="25.0" y="111" width="256.6666666666667" height="33" rx="8" fill="#E9F2FF" stroke="none"/>
+<text x="39.0" y="134" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="17" font-weight="700" fill="#194FAD" text-anchor="start">用户入口</text>
+<rect x="25.0" y="158" width="256.6666666666667" height="97" rx="11" fill="#FFFFFF" stroke="#CDD9E7"/>
+<rect x="37.0" y="171" width="5" height="71" rx="2" fill="#194FAD" stroke="none"/>
+<text x="52.0" y="194" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="21" font-weight="700" fill="#194FAD" text-anchor="start">工作室或对话</text>
+<text x="52.0" y="221" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="16" font-weight="400" fill="#465A75" text-anchor="start">REST / 图像 Skill</text>
+<text x="52.0" y="244" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="16" font-weight="400" fill="#465A75" text-anchor="start">创建、编辑或找回作品</text>
+<line x1="153.33333333333334" y1="255" x2="153.33333333333334" y2="267" stroke="#194FAD" stroke-width="2"/>
+<polygon points="153.33333333333334,270 148.33333333333334,260 158.33333333333334,260" fill="#194FAD"/>
+<rect x="25.0" y="272" width="256.6666666666667" height="90" rx="11" fill="#FFFFFF" stroke="#CDD9E7"/>
+<rect x="37.0" y="285" width="5" height="64" rx="2" fill="#194FAD" stroke="none"/>
+<text x="52.0" y="308" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="21" font-weight="700" fill="#194FAD" text-anchor="start">任务状态</text>
+<text x="52.0" y="335" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="16" font-weight="400" fill="#465A75" text-anchor="start">按应用记录 ID 查询</text>
+<line x1="153.33333333333334" y1="362" x2="153.33333333333334" y2="381" stroke="#194FAD" stroke-width="2"/>
+<polygon points="153.33333333333334,384 148.33333333333334,374 158.33333333333334,374" fill="#194FAD"/>
+<rect x="25.0" y="386" width="256.6666666666667" height="90" rx="11" fill="#FFFFFF" stroke="#CDD9E7"/>
+<rect x="37.0" y="399" width="5" height="64" rx="2" fill="#194FAD" stroke="none"/>
+<text x="52.0" y="422" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="21" font-weight="700" fill="#194FAD" text-anchor="start">作品和版本</text>
+<text x="52.0" y="449" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="16" font-weight="400" fill="#465A75" text-anchor="start">展示持久图像与版本历史</text>
+<rect x="311.6666666666667" y="111" width="256.6666666666667" height="33" rx="8" fill="#E4F5F0" stroke="none"/>
+<text x="325.6666666666667" y="134" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="17" font-weight="700" fill="#126858" text-anchor="start">PostgreSQL 队列</text>
+<rect x="311.6666666666667" y="158" width="256.6666666666667" height="90" rx="11" fill="#FFFFFF" stroke="#CDD9E7"/>
+<rect x="323.6666666666667" y="171" width="5" height="64" rx="2" fill="#126858" stroke="none"/>
+<text x="338.6666666666667" y="194" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="21" font-weight="700" fill="#126858" text-anchor="start">持久化入队</text>
+<text x="338.6666666666667" y="221" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="16" font-weight="400" fill="#465A75" text-anchor="start">幂等、用户并发、来源验证</text>
+<line x1="440.0" y1="248" x2="440.0" y2="267" stroke="#126858" stroke-width="2"/>
+<polygon points="440.0,270 435.0,260 445.0,260" fill="#126858"/>
+<rect x="311.6666666666667" y="272" width="256.6666666666667" height="90" rx="11" fill="#FFFFFF" stroke="#CDD9E7"/>
+<rect x="323.6666666666667" y="285" width="5" height="64" rx="2" fill="#126858" stroke="none"/>
+<text x="338.6666666666667" y="308" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="21" font-weight="700" fill="#126858" text-anchor="start">Worker 领取</text>
+<text x="338.6666666666667" y="335" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="16" font-weight="400" fill="#465A75" text-anchor="start">租约和状态回写</text>
+<line x1="440.0" y1="362" x2="440.0" y2="381" stroke="#126858" stroke-width="2"/>
+<polygon points="440.0,384 435.0,374 445.0,374" fill="#126858"/>
+<rect x="311.6666666666667" y="386" width="256.6666666666667" height="90" rx="11" fill="#FFFFFF" stroke="#CDD9E7"/>
+<rect x="323.6666666666667" y="399" width="5" height="64" rx="2" fill="#126858" stroke="none"/>
+<text x="338.6666666666667" y="422" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="21" font-weight="700" fill="#126858" text-anchor="start">编辑会话</text>
+<text x="338.6666666666667" y="449" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="16" font-weight="400" fill="#465A75" text-anchor="start">根作品、父版本、次数与退出</text>
+<rect x="598.3333333333334" y="111" width="256.6666666666667" height="33" rx="8" fill="#F0EBFC" stroke="none"/>
+<text x="612.3333333333334" y="134" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="17" font-weight="700" fill="#5D429E" text-anchor="start">供应商与归档</text>
+<rect x="598.3333333333334" y="158" width="256.6666666666667" height="90" rx="11" fill="#FFFFFF" stroke="#CDD9E7"/>
+<rect x="610.3333333333334" y="171" width="5" height="64" rx="2" fill="#5D429E" stroke="none"/>
+<text x="625.3333333333334" y="194" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="21" font-weight="700" fill="#5D429E" text-anchor="start">千问图像</text>
+<text x="625.3333333333334" y="221" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="16" font-weight="400" fill="#465A75" text-anchor="start">提交异步生成 / 编辑</text>
+<line x1="726.6666666666667" y1="248" x2="726.6666666666667" y2="267" stroke="#5D429E" stroke-width="2"/>
+<polygon points="726.6666666666667,270 721.6666666666667,260 731.6666666666667,260" fill="#5D429E"/>
+<rect x="598.3333333333334" y="272" width="256.6666666666667" height="90" rx="11" fill="#FFFFFF" stroke="#CDD9E7"/>
+<rect x="610.3333333333334" y="285" width="5" height="64" rx="2" fill="#5D429E" stroke="none"/>
+<text x="625.3333333333334" y="308" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="21" font-weight="700" fill="#5D429E" text-anchor="start">结果轮询</text>
+<text x="625.3333333333334" y="335" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="16" font-weight="400" fill="#465A75" text-anchor="start">等待结果并校验响应</text>
+<line x1="726.6666666666667" y1="362" x2="726.6666666666667" y2="381" stroke="#5D429E" stroke-width="2"/>
+<polygon points="726.6666666666667,384 721.6666666666667,374 731.6666666666667,374" fill="#5D429E"/>
+<rect x="598.3333333333334" y="386" width="256.6666666666667" height="90" rx="11" fill="#FFFFFF" stroke="#CDD9E7"/>
+<rect x="610.3333333333334" y="399" width="5" height="64" rx="2" fill="#5D429E" stroke="none"/>
+<text x="625.3333333333334" y="422" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="21" font-weight="700" fill="#5D429E" text-anchor="start">七牛归档</text>
+<text x="625.3333333333334" y="449" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="16" font-weight="400" fill="#465A75" text-anchor="start">持久图片地址后标记成功</text>
+<line x1="283.6666666666667" y1="207" x2="306.6666666666667" y2="207" stroke="#126858" stroke-width="2"/>
+<polygon points="309.6666666666667,207 299.6666666666667,202 299.6666666666667,212" fill="#126858"/>
+<line x1="283.6666666666667" y1="321" x2="306.6666666666667" y2="321" stroke="#126858" stroke-width="2"/>
+<polygon points="309.6666666666667,321 299.6666666666667,316 299.6666666666667,326" fill="#126858"/>
+<line x1="309.6666666666667" y1="435" x2="286.6666666666667" y2="435" stroke="#194FAD" stroke-width="2"/>
+<polygon points="283.6666666666667,435 293.6666666666667,440 293.6666666666667,430" fill="#194FAD"/>
+<line x1="570.3333333333334" y1="207" x2="593.3333333333334" y2="207" stroke="#5D429E" stroke-width="2"/>
+<polygon points="596.3333333333334,207 586.3333333333334,202 586.3333333333334,212" fill="#5D429E"/>
+<line x1="570.3333333333334" y1="321" x2="593.3333333333334" y2="321" stroke="#5D429E" stroke-width="2"/>
+<polygon points="596.3333333333334,321 586.3333333333334,316 586.3333333333334,326" fill="#5D429E"/>
+<line x1="596.3333333333334" y1="435" x2="573.3333333333334" y2="435" stroke="#126858" stroke-width="2"/>
+<polygon points="570.3333333333334,435 580.3333333333334,440 580.3333333333334,430" fill="#126858"/>
+<rect x="25" y="475" width="830" height="36" rx="8" fill="#E7EEF8" stroke="none"/>
+<text x="42" y="499" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="17" font-weight="600" fill="#16243B" text-anchor="start">供应商已生成后进入 STORING；归档成功后任务才变为 SUCCEEDED。</text>
+</svg>

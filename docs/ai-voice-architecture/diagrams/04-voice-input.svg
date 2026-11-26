@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="457" viewBox="0 0 880 457" role="img">
+<title>ASR 结束后如何决定是否提交</title>
+<rect x="2" y="2" width="876" height="453" rx="18" fill="#F4F7FB" stroke="#CDD9E7"/>
+<rect x="20" y="22" width="5" height="50" rx="2" fill="#3169D1" stroke="none"/>
+<text x="40" y="46" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="30" font-weight="700" fill="#16243B" text-anchor="start">ASR 结束后如何决定是否提交</text>
+<text x="41" y="74" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="17" font-weight="400" fill="#465A75" text-anchor="start">服务端结合转写、语音时长、能量和当前播报文本</text>
+<line x1="24" y1="94" x2="856" y2="94" stroke="#CDD9E7" stroke-width="1"/>
+<rect x="25" y="115" width="254" height="84" rx="11" fill="#FFFFFF" stroke="#CDD9E7"/>
+<rect x="37" y="128" width="5" height="58" rx="2" fill="#194FAD" stroke="none"/>
+<text x="52" y="151" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="21" font-weight="700" fill="#194FAD" text-anchor="start">原生 PCM</text>
+<text x="52" y="178" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="16" font-weight="400" fill="#465A75" text-anchor="start">采集、回声消除与降噪</text>
+<rect x="313" y="115" width="254" height="84" rx="11" fill="#FFFFFF" stroke="#CDD9E7"/>
+<rect x="325" y="128" width="5" height="58" rx="2" fill="#5D429E" stroke="none"/>
+<text x="340" y="151" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="21" font-weight="700" fill="#5D429E" text-anchor="start">百炼 ASR</text>
+<text x="340" y="178" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="16" font-weight="400" fill="#465A75" text-anchor="start">句子边界、增量与最终转写</text>
+<rect x="601" y="115" width="254" height="84" rx="11" fill="#FFFFFF" stroke="#CDD9E7"/>
+<rect x="613" y="128" width="5" height="58" rx="2" fill="#194FAD" stroke="none"/>
+<text x="628" y="151" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="21" font-weight="700" fill="#194FAD" text-anchor="start">音频证据</text>
+<text x="628" y="178" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="16" font-weight="400" fill="#465A75" text-anchor="start">服务端按样本计算能量</text>
+<line x1="152" y1="199" x2="152" y2="218" stroke="#194FAD" stroke-width="2"/>
+<line x1="440" y1="199" x2="440" y2="218" stroke="#194FAD" stroke-width="2"/>
+<line x1="728" y1="199" x2="728" y2="218" stroke="#194FAD" stroke-width="2"/>
+<line x1="152" y1="218" x2="728" y2="218" stroke="#194FAD" stroke-width="2"/>
+<line x1="440" y1="218" x2="440" y2="233" stroke="#194FAD" stroke-width="2"/>
+<polygon points="440,236 435,226 445,226" fill="#194FAD"/>
+<rect x="276" y="236" width="328" height="44" rx="8" fill="#F0EBFC" stroke="none"/>
+<text x="440" y="264" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="18" font-weight="700" fill="#5D429E" text-anchor="middle">assess_voice_input · 最终判定</text>
+<line x1="440" y1="280" x2="440" y2="294" stroke="#5D429E" stroke-width="2"/>
+<line x1="152" y1="294" x2="728" y2="294" stroke="#5D429E" stroke-width="2"/>
+<line x1="152" y1="294" x2="152" y2="312" stroke="#5D429E" stroke-width="2"/>
+<polygon points="152,315 147,305 157,305" fill="#5D429E"/>
+<line x1="440" y1="294" x2="440" y2="312" stroke="#5D429E" stroke-width="2"/>
+<polygon points="440,315 435,305 445,305" fill="#5D429E"/>
+<line x1="728" y1="294" x2="728" y2="312" stroke="#5D429E" stroke-width="2"/>
+<polygon points="728,315 723,305 733,305" fill="#5D429E"/>
+<rect x="25" y="315" width="254" height="91" rx="11" fill="#FFFFFF" stroke="#CDD9E7"/>
+<rect x="37" y="328" width="5" height="65" rx="2" fill="#5D429E" stroke="none"/>
+<text x="52" y="351" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="21" font-weight="700" fill="#5D429E" text-anchor="start">忽略</text>
+<text x="52" y="378" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="16" font-weight="400" fill="#465A75" text-anchor="start">空串、标点或语气词</text>
+<text x="52" y="401" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="16" font-weight="400" fill="#465A75" text-anchor="start">清除字幕，结束本轮输入</text>
+<rect x="313" y="315" width="254" height="91" rx="11" fill="#FFFFFF" stroke="#CDD9E7"/>
+<rect x="325" y="328" width="5" height="65" rx="2" fill="#8A4F15" stroke="none"/>
+<text x="340" y="351" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="21" font-weight="700" fill="#8A4F15" text-anchor="start">待确认</text>
+<text x="340" y="378" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="16" font-weight="400" fill="#465A75" text-anchor="start">证据不足、疑似回声等</text>
+<text x="340" y="401" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="16" font-weight="400" fill="#465A75" text-anchor="start">显示候选，可编辑后发送</text>
+<rect x="601" y="315" width="254" height="91" rx="11" fill="#FFFFFF" stroke="#CDD9E7"/>
+<rect x="613" y="328" width="5" height="65" rx="2" fill="#126858" stroke="none"/>
+<text x="628" y="351" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="21" font-weight="700" fill="#126858" text-anchor="start">受理</text>
+<text x="628" y="378" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="16" font-weight="400" fill="#465A75" text-anchor="start">通过检查并处理唤醒状态</text>
+<text x="628" y="401" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="16" font-weight="400" fill="#465A75" text-anchor="start">写入 VoiceTurn，执行 Agent</text>
+<rect x="25" y="418" width="830" height="29" rx="8" fill="#E7EEF8" stroke="none"/>
+<text x="42" y="438" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="16" font-weight="600" fill="#16243B" text-anchor="start">音量提示不会受理新轮次；有效的新输入才会替换当前回答。</text>
+</svg>

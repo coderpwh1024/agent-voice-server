@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="554" viewBox="0 0 880 554" role="img">
+<title>离线唤醒与云端确认</title>
+<rect x="2" y="2" width="876" height="550" rx="18" fill="#F4F7FB" stroke="#CDD9E7"/>
+<rect x="20" y="22" width="5" height="50" rx="2" fill="#3169D1" stroke="none"/>
+<text x="40" y="46" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="30" font-weight="700" fill="#16243B" text-anchor="start">离线唤醒与云端确认</text>
+<text x="41" y="74" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="17" font-weight="400" fill="#465A75" text-anchor="start">待机采集由 App 管理，命中后才创建云端语音会话</text>
+<line x1="24" y1="94" x2="856" y2="94" stroke="#CDD9E7" stroke-width="1"/>
+<rect x="25.0" y="111" width="126" height="36" rx="8" fill="#E9F2FF" stroke="none"/>
+<text x="88.0" y="135" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="17" font-weight="700" fill="#194FAD" text-anchor="middle">手机收音</text>
+<line x1="88.0" y1="151" x2="88.0" y2="508" stroke="#CDD9E7" stroke-width="1" stroke-dasharray="6 6"/>
+<rect x="259.66666666666663" y="111" width="126" height="36" rx="8" fill="#E9F2FF" stroke="none"/>
+<text x="322.66666666666663" y="135" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="17" font-weight="700" fill="#194FAD" text-anchor="middle">Sherpa KWS</text>
+<line x1="322.66666666666663" y1="151" x2="322.66666666666663" y2="508" stroke="#CDD9E7" stroke-width="1" stroke-dasharray="6 6"/>
+<rect x="494.33333333333326" y="111" width="126" height="36" rx="8" fill="#E4F5F0" stroke="none"/>
+<text x="557.3333333333333" y="135" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="17" font-weight="700" fill="#126858" text-anchor="middle">Flutter 控制器</text>
+<line x1="557.3333333333333" y1="151" x2="557.3333333333333" y2="508" stroke="#CDD9E7" stroke-width="1" stroke-dasharray="6 6"/>
+<rect x="729.0" y="111" width="126" height="36" rx="8" fill="#F0EBFC" stroke="none"/>
+<text x="792.0" y="135" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="17" font-weight="700" fill="#5D429E" text-anchor="middle">后端 ASR</text>
+<line x1="792.0" y1="151" x2="792.0" y2="508" stroke="#CDD9E7" stroke-width="1" stroke-dasharray="6 6"/>
+<line x1="88.0" y1="178" x2="319.66666666666663" y2="178" stroke="#194FAD" stroke-width="2"/>
+<polygon points="322.66666666666663,178 312.66666666666663,173 312.66666666666663,183" fill="#194FAD"/>
+<text x="205.33333333333331" y="169.0" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="15" font-weight="600" fill="#194FAD" text-anchor="middle">本机 PCM，开辟关键词检测流</text>
+<line x1="88.0" y1="230" x2="554.3333333333333" y2="230" stroke="#194FAD" stroke-width="2"/>
+<polygon points="557.3333333333333,230 547.3333333333333,225 547.3333333333333,235" fill="#194FAD"/>
+<text x="322.66666666666663" y="221.0" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="15" font-weight="600" fill="#194FAD" text-anchor="middle">保存有限预卷</text>
+<line x1="322.66666666666663" y1="282" x2="554.3333333333333" y2="282" stroke="#194FAD" stroke-width="2"/>
+<polygon points="557.3333333333333,282 547.3333333333333,277 547.3333333333333,287" fill="#194FAD"/>
+<text x="439.99999999999994" y="273.0" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="15" font-weight="600" fill="#194FAD" text-anchor="middle">关键词命中</text>
+<line x1="557.3333333333333" y1="334" x2="789.0" y2="334" stroke="#126858" stroke-width="2"/>
+<polygon points="792.0,334 782.0,329 782.0,339" fill="#126858"/>
+<text x="674.6666666666666" y="325.0" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="15" font-weight="600" fill="#126858" text-anchor="middle">创建会话，回传预卷及后续帧</text>
+<line x1="792.0" y1="386" x2="560.3333333333333" y2="386" stroke="#5D429E" stroke-width="2"/>
+<polygon points="557.3333333333333,386 567.3333333333333,391 567.3333333333333,381" fill="#5D429E"/>
+<text x="674.6666666666666" y="377.0" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="15" font-weight="600" fill="#5D429E" text-anchor="middle">wake.accepted / wake.rejected</text>
+<line x1="557.3333333333333" y1="438" x2="91.0" y2="438" stroke="#126858" stroke-width="2"/>
+<polygon points="88.0,438 98.0,443 98.0,433" fill="#126858"/>
+<text x="322.66666666666663" y="429.0" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="15" font-weight="600" fill="#126858" text-anchor="middle">通过：切换双工语音模式</text>
+<line x1="557.3333333333333" y1="490" x2="91.0" y2="490" stroke="#8A4F15" stroke-width="2" stroke-dasharray="6 6"/>
+<polygon points="88.0,490 98.0,495 98.0,485" fill="#8A4F15"/>
+<text x="322.66666666666663" y="481.0" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="15" font-weight="600" fill="#8A4F15" text-anchor="middle">拒绝或断开：按设置恢复待机</text>
+<rect x="25" y="508" width="830" height="30" rx="8" fill="#E7EEF8" stroke="none"/>
+<text x="42" y="529" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="16" font-weight="600" fill="#16243B" text-anchor="start">只有唤醒词时播报固定问候；有效随附指令继续进入 Agent。</text>
+</svg>

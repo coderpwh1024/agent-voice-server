@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="710" viewBox="0 0 880 710" role="img">
+<title>音频发送、播放确认与取消</title>
+<rect x="2" y="2" width="876" height="706" rx="18" fill="#F4F7FB" stroke="#CDD9E7"/>
+<rect x="20" y="22" width="5" height="50" rx="2" fill="#3169D1" stroke="none"/>
+<text x="40" y="46" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="30" font-weight="700" fill="#16243B" text-anchor="start">音频发送、播放确认与取消</text>
+<text x="41" y="74" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="17" font-weight="400" fill="#465A75" text-anchor="start">同一 response_id 关联文字、音频段及设备回报</text>
+<line x1="24" y1="94" x2="856" y2="94" stroke="#CDD9E7" stroke-width="1"/>
+<rect x="25.0" y="111" width="126" height="36" rx="8" fill="#E9F2FF" stroke="none"/>
+<text x="88.0" y="135" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="17" font-weight="700" fill="#194FAD" text-anchor="middle">原生播放器</text>
+<line x1="88.0" y1="151" x2="88.0" y2="664" stroke="#CDD9E7" stroke-width="1" stroke-dasharray="6 6"/>
+<rect x="259.66666666666663" y="111" width="126" height="36" rx="8" fill="#E9F2FF" stroke="none"/>
+<text x="322.66666666666663" y="135" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="17" font-weight="700" fill="#194FAD" text-anchor="middle">Flutter</text>
+<line x1="322.66666666666663" y1="151" x2="322.66666666666663" y2="664" stroke="#CDD9E7" stroke-width="1" stroke-dasharray="6 6"/>
+<rect x="494.33333333333326" y="111" width="126" height="36" rx="8" fill="#E4F5F0" stroke="none"/>
+<text x="557.3333333333333" y="135" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="17" font-weight="700" fill="#126858" text-anchor="middle">VoiceConnection</text>
+<line x1="557.3333333333333" y1="151" x2="557.3333333333333" y2="664" stroke="#CDD9E7" stroke-width="1" stroke-dasharray="6 6"/>
+<rect x="729.0" y="111" width="126" height="36" rx="8" fill="#F0EBFC" stroke="none"/>
+<text x="792.0" y="135" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="17" font-weight="700" fill="#5D429E" text-anchor="middle">Agent / TTS</text>
+<line x1="792.0" y1="151" x2="792.0" y2="664" stroke="#CDD9E7" stroke-width="1" stroke-dasharray="6 6"/>
+<line x1="792.0" y1="178" x2="560.3333333333333" y2="178" stroke="#5D429E" stroke-width="2"/>
+<polygon points="557.3333333333333,178 567.3333333333333,183 567.3333333333333,173" fill="#5D429E"/>
+<text x="674.6666666666666" y="169.0" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="15" font-weight="600" fill="#5D429E" text-anchor="middle">文本与合成字节</text>
+<line x1="557.3333333333333" y1="230" x2="325.66666666666663" y2="230" stroke="#126858" stroke-width="2"/>
+<polygon points="322.66666666666663,230 332.66666666666663,235 332.66666666666663,225" fill="#126858"/>
+<text x="439.99999999999994" y="221.0" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="15" font-weight="600" fill="#126858" text-anchor="middle">VCE1 + 段边界</text>
+<line x1="322.66666666666663" y1="282" x2="91.0" y2="282" stroke="#194FAD" stroke-width="2"/>
+<polygon points="88.0,282 98.0,287 98.0,277" fill="#194FAD"/>
+<text x="205.33333333333331" y="273.0" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="15" font-weight="600" fill="#194FAD" text-anchor="middle">排队播放 PCM</text>
+<line x1="557.3333333333333" y1="334" x2="325.66666666666663" y2="334" stroke="#126858" stroke-width="2" stroke-dasharray="6 6"/>
+<polygon points="322.66666666666663,334 332.66666666666663,339 332.66666666666663,329" fill="#126858"/>
+<text x="439.99999999999994" y="325.0" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="15" font-weight="600" fill="#126858" text-anchor="middle">response.done</text>
+<line x1="88.0" y1="386" x2="319.66666666666663" y2="386" stroke="#194FAD" stroke-width="2"/>
+<polygon points="322.66666666666663,386 312.66666666666663,381 312.66666666666663,391" fill="#194FAD"/>
+<text x="205.33333333333331" y="377.0" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="15" font-weight="600" fill="#194FAD" text-anchor="middle">原生段完成 / 播放结束</text>
+<line x1="322.66666666666663" y1="438" x2="554.3333333333333" y2="438" stroke="#194FAD" stroke-width="2"/>
+<polygon points="557.3333333333333,438 547.3333333333333,433 547.3333333333333,443" fill="#194FAD"/>
+<text x="439.99999999999994" y="429.0" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="15" font-weight="600" fill="#194FAD" text-anchor="middle">回报实际播放样本</text>
+<line x1="322.66666666666663" y1="490" x2="554.3333333333333" y2="490" stroke="#8A4F15" stroke-width="2" stroke-dasharray="6 6"/>
+<polygon points="557.3333333333333,490 547.3333333333333,485 547.3333333333333,495" fill="#8A4F15"/>
+<text x="439.99999999999994" y="481.0" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="15" font-weight="600" fill="#8A4F15" text-anchor="middle">分支：用户明确取消</text>
+<line x1="557.3333333333333" y1="542" x2="789.0" y2="542" stroke="#8A4F15" stroke-width="2" stroke-dasharray="6 6"/>
+<polygon points="792.0,542 782.0,537 782.0,547" fill="#8A4F15"/>
+<text x="674.6666666666666" y="533.0" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="15" font-weight="600" fill="#8A4F15" text-anchor="middle">标记失效并取消在途工作</text>
+<line x1="557.3333333333333" y1="594" x2="325.66666666666663" y2="594" stroke="#8A4F15" stroke-width="2" stroke-dasharray="6 6"/>
+<polygon points="322.66666666666663,594 332.66666666666663,599 332.66666666666663,589" fill="#8A4F15"/>
+<text x="439.99999999999994" y="585.0" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="15" font-weight="600" fill="#8A4F15" text-anchor="middle">response.cancelled</text>
+<line x1="322.66666666666663" y1="646" x2="91.0" y2="646" stroke="#8A4F15" stroke-width="2" stroke-dasharray="6 6"/>
+<polygon points="88.0,646 98.0,651 98.0,641" fill="#8A4F15"/>
+<text x="205.33333333333331" y="637.0" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="15" font-weight="600" fill="#8A4F15" text-anchor="middle">清空该回答的播放器队列</text>
+<rect x="25" y="664" width="830" height="30" rx="8" fill="#E7EEF8" stroke="none"/>
+<text x="42" y="685" font-family="PingFang SC, Noto Sans SC, Microsoft YaHei, sans-serif" font-size="16" font-weight="600" fill="#16243B" text-anchor="start">真正播完由设备报告；打断后的上下文只计入已完整播放的文字段。</text>
+</svg>
