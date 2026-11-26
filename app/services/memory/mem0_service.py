@@ -183,6 +183,8 @@ class Mem0Service:
 
     @staticmethod
     def _record(data: dict[str, Any]) -> MemoryRecord:
+        if data.get("metadata") is None:
+            data = {**data, "metadata": {}}
         return MemoryRecord.model_validate(data)
 
     def _list(self, user_id: str, limit: int, cursor: UUID | None) -> MemoryList:

@@ -51,6 +51,16 @@ async def test_single_operations_deny_foreign_and_missing_memories(management, o
 
 
 @pytest.mark.asyncio
+async def test_get_treats_null_metadata_as_empty(management):
+    service, memory = management
+    memory.get.return_value["metadata"] = None
+
+    record = await service.get_memory(MEMORY_ID, "alice")
+
+    assert record.metadata == {}
+
+
+@pytest.mark.asyncio
 async def test_update_returns_new_text_and_clears_extraction_context(management):
     service, memory = management
     old = memory.get.return_value
