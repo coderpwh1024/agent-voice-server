@@ -3,7 +3,11 @@
 import json
 import logging
 import traceback
+from copy import deepcopy
 from datetime import UTC, datetime
+from typing import Any
+
+from uvicorn.config import LOGGING_CONFIG
 
 from app.core.settings import LogLevel
 
@@ -30,6 +34,23 @@ class ServiceLogFilter(logging.Filter):
         return not record.name.startswith(
             ("mem0", "httpx", "httpcore", "openai", "ddgs", "primp", "mcp.")
         )
+
+
+def server_logging_config(level: LogLevel, log_format: str) -> dict[str, Any]:
+    config = deepcopy(LOGGING_CONFIG)
+    config["formatters"]["service"] = (
+        {"()": JsonFormatter}
+        if log_format == "json"
+        else {"format": "%(asctime)s %(levelname)s %(name)s %(message)s"}
+    )
+    config["filters"] = {"service": {"()": ServiceLogFilter}}
+    config["handlers"]["service"] = {
+        "class": "logging.StreamHandler",
+        "formatter": "service",
+        "filters": ["service"],
+    }
+    config["root"] = {"level": level.value, "handlers": ["service"]}
+    return config
 
 
 def configure_logging(level: LogLevel, log_format: str) -> None:

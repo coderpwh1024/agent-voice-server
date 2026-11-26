@@ -5,7 +5,7 @@ import uvicorn
 from dotenv import load_dotenv
 
 from app.core import settings
-from app.core.logging import configure_logging
+from app.core.logging import configure_logging, server_logging_config
 
 load_dotenv()
 
@@ -27,6 +27,7 @@ def main() -> None:
         host=settings.HOST,
         port=settings.PORT,
         reload=settings.is_dev(),
+        log_config=server_logging_config(settings.LOG_LEVEL, settings.LOG_FORMAT),
         timeout_graceful_shutdown=settings.GRACEFUL_SHUTDOWN_TIMEOUT,
     )
 
