@@ -7961,6 +7961,15 @@
           },
           "context": {
             "$ref": "#/components/schemas/LocalMemoryContext"
+          },
+          "version": {
+            "type": "integer",
+            "enum": [
+              1,
+              2
+            ],
+            "title": "Version",
+            "default": 1
           }
         },
         "additionalProperties": false,
@@ -8031,7 +8040,8 @@
               "profile",
               "person",
               "project",
-              "episode"
+              "episode",
+              "procedure"
             ],
             "title": "Category"
           },
@@ -8063,6 +8073,80 @@
             "type": "boolean",
             "title": "Requires Confirmation",
             "default": true
+          },
+          "fact_key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "preferred_name",
+                  "response_style",
+                  "home_city",
+                  "preference",
+                  "status",
+                  "decision"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fact Key"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 60,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject"
+          },
+          "topic": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "image",
+                  "video",
+                  "email",
+                  "project",
+                  "other"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Topic"
+          },
+          "event_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event At"
+          },
+          "procedure_key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "image_review_first"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Procedure Key"
           }
         },
         "additionalProperties": false,
@@ -8087,7 +8171,8 @@
               "profile",
               "person",
               "project",
-              "episode"
+              "episode",
+              "procedure"
             ],
             "title": "Category"
           },
@@ -8096,6 +8181,30 @@
             "maxLength": 1000,
             "minLength": 1,
             "title": "Text"
+          },
+          "procedure_key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "image_review_first"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Procedure Key"
+          },
+          "event_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event At"
           }
         },
         "additionalProperties": false,

@@ -164,3 +164,50 @@ def test_context_budget_rejects_duplicates_and_extra_identity():
             LocalMemoryContext.model_validate(data)
     with pytest.raises(ValidationError):
         LocalMemoryExtractionInput.model_validate(body(text="x" * 6001))
+
+
+def test_layered_procedure_requires_explicit_request_and_device_confirmation(local_api):
+    client, chain, auth = local_api
+    text = "请记住，以后生成图片前先给我看方案。"
+    response = client.post("/local-memories/extract", json=body(text=text, version=2), headers=auth)
+    proposal = response.json()["data"]["proposals"][0]
+    assert proposal["category"] == "procedure"
+    assert proposal["procedure_key"] == "image_review_first"
+    assert proposal["evidence"] == text
+    assert proposal["requires_confirmation"] is True
+    chain.ainvoke.assert_not_awaited()
+    response = client.post("/local-memories/extract", json=body(text=text), headers=auth)
+    assert response.json()["data"]["proposals"] == []
+    chain.ainvoke.assert_awaited_once()
+
+
+def test_layered_extraction_preserves_fact_identity_and_event_time(local_api):
+    client, chain, auth = local_api
+    chain.ainvoke.return_value = {
+        "proposals": [
+            {
+                "action": "add",
+                "category": "profile",
+                "fact_key": "response_style",
+                "text": "偏好简短回答",
+                "evidence": "我喜欢简短的回答",
+            },
+            {
+                "action": "add",
+                "category": "episode",
+                "topic": "image",
+                "event_at": "2026-11-10T09:30:00+08:00",
+                "text": "11 月 10 日采用封面 3",
+                "evidence": "11 月 10 日采用封面 3",
+            },
+        ]
+    }
+    response = client.post(
+        "/local-memories/extract",
+        json=body(text="我喜欢简短的回答。11 月 10 日采用封面 3。", version=2),
+        headers=auth,
+    )
+    fact, episode = response.json()["data"]["proposals"]
+    assert fact["fact_key"] == "response_style"
+    assert episode["topic"] == "image"
+    assert episode["event_at"] == "2026-11-10T09:30:00+08:00"

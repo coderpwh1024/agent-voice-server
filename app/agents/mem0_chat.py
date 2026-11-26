@@ -19,6 +19,7 @@ from app.schemas.execution import ExecutionConfirmation
 from app.schemas.memory_commands import MemoryDialogue
 from app.services.execution import ExecutionTrace, confirmation_id, progress
 from app.services.memory.local_context import device_memory
+from app.services.memory.local_extraction import is_image_review_request
 from app.services.memory.mem0_service import Mem0Service, get_mem0_service
 from app.services.skills.image_voice import ImageVoiceSession
 from app.services.skills.video_chat import VideoSkillSession
@@ -46,7 +47,9 @@ def _local_history_start(previous: Mem0ChatState | None, epoch: int) -> int:
     return previous.get("local_memory_context_start", 0)
 
 
-def _chat_prompt(messages: list[BaseMessage], facts: list[str], status: str) -> list[BaseMessage]:
+def _chat_prompt(
+    messages: list[BaseMessage], facts: list[str], status: str, episodes: list[str] | None = None
+) -> list[BaseMessage]:
     prefix: list[BaseMessage] = [
         SystemMessage(content=settings.mem0_prompts.chat_system),
     ]
@@ -60,10 +63,13 @@ def _chat_prompt(messages: list[BaseMessage], facts: list[str], status: str) -> 
             name="runtime_context",
         )
     )
-    if facts:
+    if facts or episodes:
+        references = {"untrusted_user_memories": facts}
+        if episodes:
+            references["untrusted_past_events"] = episodes
         prefix.append(
             HumanMessage(
-                content=json.dumps({"untrusted_user_memories": facts}, ensure_ascii=False),
+                content=json.dumps(references, ensure_ascii=False),
                 name="retrieved_memories",
             )
         )
@@ -162,7 +168,12 @@ async def _mem0_chat(
         if isinstance(thinking, bool)
         else settings.CHAT_LLM_ENABLE_THINKING,
     )
-    if user_messages:
+    procedure_request = bool(
+        local is not None
+        and user_messages
+        and is_image_review_request(user_messages[-1]["content"])
+    )
+    if user_messages and not procedure_request:
         human = next(
             message for message in reversed(new_messages) if isinstance(message, HumanMessage)
         )
@@ -221,14 +232,26 @@ async def _mem0_chat(
             )
     logger.info("Mem0 chatbot started memory_enabled=%s", memory is not None)
     await progress("memory.search", "检索相关记忆")
+    episodes: list[str] = []
     if local is not None:
-        facts = [item.text for item in local.context.memories]
+        facts = [
+            item.text
+            for item in local.context.memories
+            if item.category not in {"procedure", "episode"}
+        ]
+        episodes = [
+            f"{item.event_at.isoformat()} {item.text}" if item.event_at else item.text
+            for item in local.context.memories
+            if item.category == "episode"
+        ]
         status = "local_reference"
         logger.info(
-            "Device memory selected revision=%d epoch=%d references=%d",
+            "Device memory selected revision=%d epoch=%d semantic=%d episodic=%d procedural=%d",
             local.context.revision,
             local.context.epoch,
             len(facts),
+            len(episodes),
+            sum(item.category == "procedure" for item in local.context.memories),
         )
     else:
         facts, status = await _retrieve_facts(memory, user_messages, user_id)
@@ -241,7 +264,7 @@ async def _mem0_chat(
         else (
             "记忆服务未启用"
             if status == "disabled"
-            else ("已找到相关记忆" if facts else "未找到相关记忆")
+            else ("已找到相关记忆" if facts or episodes else "未找到相关记忆")
         ),
     )
     prompt_messages = (
@@ -249,7 +272,7 @@ async def _mem0_chat(
         if local is not None
         else messages
     )
-    prompt = _chat_prompt(prompt_messages, facts, status)
+    prompt = _chat_prompt(prompt_messages, facts, status, episodes)
     if local is not None:
         prompt.insert(
             1,
@@ -260,7 +283,9 @@ async def _mem0_chat(
                     "新记忆由 App 另行提炼和写回；修改、删除、清空及敏感信息须在本机记忆页确认。"
                     "用户查询记忆时只根据本轮提供的内容回答，资料不足应说明。"
                     "用户要求管理记忆时说明需到本机记忆页查看候选与确认，不要声称已执行。"
-                    f"本机声明有效记忆总数为 {local.context.total_count}，本次提供 {len(facts)} 条参考；"
+                    "untrusted_past_events 是历史事件，只用于回忆发生过的事，不代表目前仍然适用。"
+                    f"本机声明有效记忆总数为 {local.context.total_count}，"
+                    f"本次提供 {len(facts) + len(episodes)} 条参考；"
                     "未提供的记忆不可编造，不能从旧聊天恢复本次没有提供的个人事实。"
                 )
             ),
@@ -276,7 +301,11 @@ async def _mem0_chat(
         else None
     )
     await progress("chat.answer", "生成回复")
-    response = await answer_chat(model, prompt, config, video=video)
+    response = (
+        AIMessage(content="可以在本机记忆页启用这条流程。开启自动整理时，也可在那里确认本轮候选。")
+        if procedure_request
+        else await answer_chat(model, prompt, config, video=video)
+    )
     await progress("chat.answer", "生成回复", "succeeded")
     if video is not None:
         video_dialogue = video.saved

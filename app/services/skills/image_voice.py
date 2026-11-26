@@ -41,6 +41,7 @@ from app.schemas.image import (
 from app.services.execution import progress
 from app.services.image.runtime import get_image_service
 from app.services.image.service import ImageService
+from app.services.memory.local_context import device_memory
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,9 @@ _IMAGE_WORDS = re.compile(
     re.I,
 )
 _CREATE = re.compile(r"生成|画|做|创建|制作|create|generate|draw", re.I)
+_DIRECT_CREATE = re.compile(
+    r"^(?:(?:请|帮我|给我)\s*)*(?:直接|立即|现在就)\s*(?:生成|画|做|创建|制作)"
+)
 _EDIT = re.compile(r"编辑|修改|改|替换|换|调整|添加|加上|再加|去掉|移除|重绘|edit|change", re.I)
 _LOOKUP = re.compile(
     r"查询|查一下|查下|查找|搜|找[一下出找带有个张些]|(?:^|帮我|给我|请)\s*[查找看]|"
@@ -307,6 +311,20 @@ class ImageVoiceSession:
             return _reply("请描述想生成的图像和画面内容。", "clarification")
         if operation.prompt is None:
             return _reply("请描述想生成的图像和画面内容。", "clarification")
+        if operation.action == "create" and not _DIRECT_CREATE.match(normalized):
+            thread_id = values.get("thread_id")
+            local = device_memory(user_id, thread_id) if isinstance(thread_id, str) else None
+            if local is not None and any(
+                item.procedure_key == "image_review_first" for item in local.context.memories
+            ):
+                logger.info(
+                    "Local memory procedure applied procedure=image_review_first response_id=%s",
+                    config.get("metadata", {}).get("execution_response_id"),
+                )
+                return _reply(
+                    f"画面方案：{operation.prompt}\n如果方案合适，请说‘直接生成’，并带上画面要求。",
+                    "plan_ready",
+                )
         await progress("image.submit", "提交图像任务")
         try:
             key = hashlib.sha256(

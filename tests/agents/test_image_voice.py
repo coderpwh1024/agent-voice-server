@@ -2,6 +2,7 @@ import importlib
 import json
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, Mock, call
+from uuid import uuid4
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
@@ -11,6 +12,8 @@ from app.core import settings as app_settings
 from app.core.skills import IMAGE_SKILL_NAME, SkillDefinition
 from app.models.image import ImageEditLimitError
 from app.schemas.image import ImageListQuery, ImageLoop, ImageStatus, ImageTask, ImageTaskPage
+from app.schemas.local_memory import LocalMemoryContext, LocalMemoryReference
+from app.services.memory.local_context import DeviceMemory, device_memory_scope
 from app.services.skills import image_voice
 
 agent_module = importlib.import_module("app.agents.mem0_chat")
@@ -76,6 +79,30 @@ def setup(monkeypatch):
     graph = agent_module.mem0_chat.copy()
     graph.checkpointer = MemorySaver()
     return graph, model, service, memory
+
+
+@pytest.mark.asyncio
+async def test_confirmed_local_procedure_previews_without_submitting(setup):
+    graph, model, service, _ = setup
+    model.ainvoke.return_value = operation("create", prompt="纸艺小船")
+    service.create.return_value = image_task(14, ImageStatus.QUEUED)
+    context = LocalMemoryContext(
+        memories=[
+            LocalMemoryReference(
+                id=uuid4(),
+                category="procedure",
+                text="先看方案",
+                procedure_key="image_review_first",
+            )
+        ]
+    )
+    with device_memory_scope(DeviceMemory("7", "voice-image-tests", context)):
+        draft = await graph.ainvoke(user_input("生成一张纸艺小船的图片"), config())
+        assert draft["messages"][0].response_metadata["image_status"] == "plan_ready"
+        assert "纸艺小船" in draft["messages"][0].text
+        service.create.assert_not_awaited()
+        await graph.ainvoke(user_input("直接生成一张纸艺小船的图片", "direct"), config())
+    service.create.assert_awaited_once()
 
 
 @pytest.mark.asyncio

@@ -479,7 +479,8 @@
             "profile",
             "person",
             "project",
-            "episode"
+            "episode",
+            "procedure"
           ],
           "title": "Category",
           "type": "string"
@@ -489,6 +490,32 @@
           "minLength": 1,
           "title": "Text",
           "type": "string"
+        },
+        "procedure_key": {
+          "anyOf": [
+            {
+              "const": "image_review_first",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Procedure Key"
+        },
+        "event_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Event At"
         }
       },
       "required": [

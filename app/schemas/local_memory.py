@@ -9,15 +9,31 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstrai
 LocalMemoryText = Annotated[
     str, StringConstraints(strict=True, strip_whitespace=True, min_length=1, max_length=1000)
 ]
-MemoryCategory = Literal["profile", "person", "project", "episode"]
+LayeredMemoryCategory = Literal["profile", "person", "project", "episode", "procedure"]
+MemoryFactKey = Literal[
+    "preferred_name", "response_style", "home_city", "preference", "status", "decision"
+]
+MemoryTopic = Literal["image", "video", "email", "project", "other"]
+MemoryProcedure = Literal["image_review_first"]
+IMAGE_REVIEW_FIRST_TEXT = "生成图片前先给我看画面方案，明确要求直接生成时再提交。"
 
 
 class LocalMemoryReference(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: UUID
-    category: MemoryCategory
+    category: LayeredMemoryCategory
     text: LocalMemoryText
+    procedure_key: MemoryProcedure | None = None
+    event_at: AwareDatetime | None = None
+
+    @model_validator(mode="after")
+    def validate_procedure(self) -> "LocalMemoryReference":
+        if (self.category == "procedure") != (self.procedure_key is not None):
+            raise ValueError("Memory procedure does not match the category")
+        if self.event_at is not None and self.category != "episode":
+            raise ValueError("Only episodes have an event date")
+        return self
 
 
 class LocalMemoryContext(BaseModel):
@@ -45,17 +61,27 @@ class LocalMemoryExtractionInput(BaseModel):
     occurred_at: AwareDatetime = Field(default_factory=lambda: datetime.now(UTC))
     utc_offset_minutes: int = Field(default=0, ge=-840, le=840)
     context: LocalMemoryContext = Field(default_factory=LocalMemoryContext)
+    version: Literal[1, 2] = 1
 
 
 class LocalMemoryProposal(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     action: Literal["add", "update", "delete", "clear"]
-    category: MemoryCategory
+    category: LayeredMemoryCategory
     text: str = Field(default="", max_length=1000)
     evidence: str = Field(min_length=1, max_length=6000)
     target_id: UUID | None = None
     requires_confirmation: bool = True
+    fact_key: MemoryFactKey | None = Field(default=None, exclude_if=lambda value: value is None)
+    subject: str | None = Field(
+        default=None, min_length=1, max_length=60, exclude_if=lambda value: value is None
+    )
+    topic: MemoryTopic | None = Field(default=None, exclude_if=lambda value: value is None)
+    event_at: AwareDatetime | None = Field(default=None, exclude_if=lambda value: value is None)
+    procedure_key: MemoryProcedure | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
     @model_validator(mode="after")
     def validate_action(self) -> "LocalMemoryProposal":
@@ -63,6 +89,15 @@ class LocalMemoryProposal(BaseModel):
             raise ValueError("Memory text is required")
         if (self.action in {"update", "delete"}) != (self.target_id is not None):
             raise ValueError("Memory target does not match the operation")
+        if self.category == "procedure":
+            if self.action != "add" or self.procedure_key is None:
+                raise ValueError("A procedure must be explicitly enabled or removed on the device")
+        elif self.procedure_key is not None:
+            raise ValueError("Memory procedure does not match the category")
+        if self.fact_key is not None and self.category in {"episode", "procedure"}:
+            raise ValueError("Only facts have stable fact keys")
+        if self.event_at is not None and self.category != "episode":
+            raise ValueError("Only episodes have an event date")
         return self
 
 

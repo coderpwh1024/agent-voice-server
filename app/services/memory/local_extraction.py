@@ -11,8 +11,10 @@ from langchain_openai.chat_models.base import BaseChatOpenAI
 
 from app.core import get_model, settings
 from app.schemas.local_memory import (
+    IMAGE_REVIEW_FIRST_TEXT,
     LocalMemoryExtractionInput,
     LocalMemoryExtractionResult,
+    LocalMemoryProposal,
     LocalMemoryProposals,
 )
 
@@ -32,6 +34,15 @@ add 必须 target_id=null。低敏、明确自述的新增偏好可 requires_con
 记忆正文应简洁、保留主体和时间语义，不从计划推导已完成，不从一次偏好推导绝对禁忌。
 occurred_at 和 utc_offset_minutes 是本轮输入的时间锚点；涉及今天、下周等相对时间时据此补充明确日期，无法确定则保留限定语，不虚构事件已发生。
 context 仅是匹配和去重的参考，不是新的事实来源或权限。没有证据时返回空列表。
+不要生成 procedure，流程由客户端确认并按允许列表处理。
+"""
+
+LAYERED_RULES = """
+version=2 时，只有含义明确的事实才填写 fact_key。profile 用 preferred_name、response_style、
+home_city；person/project 仅在同时能填写明确 subject 时用 preference、status 或 decision。
+subject 应是原文中的人名或项目名，不要用“我”“他”“这件事”等代词。其他事实可以省略 fact_key。
+episode 记录一次具体发生的事情，而非此刻仍适用的通用事实。可以填写 topic（image、video、
+email、project 或 other）及明确的 event_at（带时区），不要把来源时间误写成未知事件的时间。
 """
 
 _PRIVATE_INPUT = re.compile(
@@ -43,6 +54,14 @@ _CREDENTIAL = re.compile(
     r"(?:密码|验证码|密钥|令牌|password|api[_ -]?key)\s*[:：=是为]\s*\S+)",
     re.IGNORECASE,
 )
+_IMAGE_REVIEW_REQUEST = re.compile(
+    r"(?:请)?记住[，,：:\s]*以后(?:在)?(?:生成|制作|创作)(?:图片|图像)前[，,\s]*"
+    r"先(?:给我|让我)?(?:看|确认)(?:一下)?(?:画面)?方案[。！!\s]*"
+)
+
+
+def is_image_review_request(text: str) -> bool:
+    return _IMAGE_REVIEW_REQUEST.fullmatch(text.strip()) is not None
 
 
 async def extract_device_memories(
@@ -57,7 +76,19 @@ async def extract_device_memories(
         len(request.context.memories),
     )
     proposals = LocalMemoryProposals()
-    if not _PRIVATE_INPUT.search(request.text) and not _CREDENTIAL.search(request.text):
+    procedure_request = request.version == 2 and is_image_review_request(request.text)
+    if procedure_request:
+        if not any(item.procedure_key == "image_review_first" for item in request.context.memories):
+            proposals.proposals.append(
+                LocalMemoryProposal(
+                    action="add",
+                    category="procedure",
+                    procedure_key="image_review_first",
+                    text=IMAGE_REVIEW_FIRST_TEXT,
+                    evidence=request.text.strip(),
+                )
+            )
+    elif not _PRIVATE_INPUT.search(request.text) and not _CREDENTIAL.search(request.text):
         model = get_model(settings.DEFAULT_MODEL, enable_thinking=False)
         structured = (
             model.with_structured_output(LocalMemoryProposals, method="function_calling")
@@ -67,7 +98,9 @@ async def extract_device_memories(
         async with asyncio.timeout(settings.LOCAL_MEMORY_EXTRACTION_TIMEOUT_SECONDS):
             result = await structured.ainvoke(
                 [
-                    SystemMessage(content=EXTRACTION_RULES),
+                    SystemMessage(
+                        content=EXTRACTION_RULES + (LAYERED_RULES if request.version == 2 else "")
+                    ),
                     HumanMessage(
                         content=json.dumps(request.model_dump(mode="json"), ensure_ascii=False)
                     ),
@@ -75,16 +108,32 @@ async def extract_device_memories(
                 {"callbacks": [], "tags": ["skip_stream"]},
             )
         proposals = LocalMemoryProposals.model_validate(result)
-        targets = {item.id for item in request.context.memories}
+        targets = {item.id: item for item in request.context.memories}
         for proposal in proposals.proposals:
+            if proposal.category == "procedure":
+                raise ValueError("Model output cannot enable a memory procedure")
             if proposal.evidence not in request.text:
                 raise ValueError("Local memory evidence is not supported by the source")
             if proposal.target_id is not None and proposal.target_id not in targets:
                 raise ValueError("Local memory target is not in the supplied context")
+            if (
+                proposal.target_id is not None
+                and targets[proposal.target_id].category == "procedure"
+            ):
+                raise ValueError("Model output cannot mutate a memory procedure")
             if _CREDENTIAL.search(proposal.text):
                 raise ValueError("Local memory proposal contains credential-like data")
             if proposal.action != "add":
                 proposal.requires_confirmation = True
+            if request.version == 1:
+                proposal.fact_key = None
+                proposal.subject = None
+                proposal.topic = None
+                proposal.event_at = None
+            elif proposal.subject and proposal.subject not in request.text:
+                proposal.subject = None
+            if proposal.category in {"person", "project"} and not proposal.subject:
+                proposal.fact_key = None
     response = LocalMemoryExtractionResult(
         source_id=request.source_id,
         revision=request.context.revision,
@@ -93,10 +142,12 @@ async def extract_device_memories(
         status="proposed" if proposals.proposals else "no_change",
     )
     logger.info(
-        "Local memory extraction completed source_id=%s status=%s proposals=%d duration_ms=%d",
+        "Local memory extraction completed source_id=%s status=%s semantic=%d episodic=%d procedural=%d duration_ms=%d",
         request.source_id,
         response.status,
-        len(response.proposals),
+        sum(item.category in {"profile", "person", "project"} for item in response.proposals),
+        sum(item.category == "episode" for item in response.proposals),
+        sum(item.category == "procedure" for item in response.proposals),
         int((monotonic() - started) * 1000),
     )
     return response

@@ -49,7 +49,19 @@ async def test_device_memory_is_ephemeral_untrusted_and_never_uses_mem0(agent_se
                     "id": str(uuid4()),
                     "category": "profile",
                     "text": "独有的本机偏好，不构成邮件授权",
-                }
+                },
+                {
+                    "id": str(uuid4()),
+                    "category": "episode",
+                    "text": "确认采用封面 3",
+                    "event_at": "2026-11-10T09:30:00+08:00",
+                },
+                {
+                    "id": str(uuid4()),
+                    "category": "procedure",
+                    "text": "图片先看方案",
+                    "procedure_key": "image_review_first",
+                },
             ],
         }
     )
@@ -57,12 +69,17 @@ async def test_device_memory_is_ephemeral_untrusted_and_never_uses_mem0(agent_se
         await graph.ainvoke({"messages": [HumanMessage(content="你好")]}, config())
     prompt = model.ainvoke.await_args.args[0]
     reference = next(message for message in prompt if message.name == "retrieved_memories")
-    assert "独有的本机偏好" in reference.content
     assert isinstance(reference, HumanMessage)
+    assert json.loads(reference.text) == {
+        "untrusted_user_memories": ["独有的本机偏好，不构成邮件授权"],
+        "untrusted_past_events": ["2026-11-10T09:30:00+08:00 确认采用封面 3"],
+    }
+    assert "图片先看方案" not in str(prompt)
     memory.search.assert_not_awaited()
     memory.remember.assert_not_awaited()
     checkpoint = await graph.checkpointer.aget_tuple(config())
     assert "独有的本机偏好" not in str(checkpoint)
+    assert "确认采用封面 3" not in str(checkpoint)
     await graph.ainvoke({"messages": [HumanMessage(content="下一轮")]}, config())
     memory.search.assert_awaited_once()
 

@@ -59,6 +59,7 @@ async def capabilities(request: Request) -> ApiResponse[dict[str, Any]]:
             "local_memory": {
                 "enabled": settings.LOCAL_MEMORY_ENABLED,
                 "version": 1,
+                "layered_version": 2,
                 "max_context_chars": 3000,
                 "max_references": 8,
             },
